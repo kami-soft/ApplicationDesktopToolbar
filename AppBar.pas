@@ -119,7 +119,6 @@ type
     szSizeInc: TSize; // Discrete width/height size increments
     szDockSize: TSize; // Width/Height for docked bar
     rcFloat: TRect; // Floating rectangle in screen coordinates
-    FloatedBorderStyle: TBorderStyle;
     nMinWidth: Integer; // Min allowed width
     nMinHeight: Integer; // Min allowed height
     nMaxWidth: Integer; // Max allowed width
@@ -152,8 +151,10 @@ type
     // We need a timer to to determine when the AppBar should be re-hidden
     FTimer: TTimer;
 
+    procedure OnAppBarTimer(Sender: TObject);
+
     // These functions encapsulate the shell's SHAppBarMessage function
-    function AppBarMessage(abMessage: TAppBarMessage; abEdge: TAppBarEdge; lParam: lParam; bRect: Boolean; var rc: TRect): UINT;
+    function AppBarMessage(abMessage: TAppBarMessage; abEdge: TAppBarEdge; lParam: lParam; var rc: TRect): UINT;
     function AppBarMessage1(abMessage: TAppBarMessage): UINT;
     function AppBarMessage2(abMessage: TAppBarMessage; abEdge: TAppBarEdge): UINT;
     function AppBarMessage3(abMessage: TAppBarMessage; abEdge: TAppBarEdge; lParam: lParam): UINT;
@@ -209,9 +210,6 @@ type
     // Called when the AppBar receives a WM_ACTIVATE message
     procedure OnActivate(var Msg: TWMActivate); message WM_ACTIVATE;
 
-    // Called every timer tick
-    procedure OnAppBarTimer(Sender: TObject);
-
     // Called when the AppBar receives a WM_NCMOUSEMOVE message
     procedure OnNcMouseMove(var Msg: TWMNCMouseMove); message WM_NCMOUSEMOVE;
 
@@ -235,31 +233,18 @@ type
 
     { AppBar-specific helper functions }
 
-    // Returns TRUE if abEdge is ABE_LEFT or ABE_RIGHT, else FALSE is returned
     function IsEdgeLeftOrRight(abEdge: TAppBarEdge): Boolean;
-
-    // Returns TRUE if abEdge is ABE_TOP or ABE_BOTTOM, else FALSE is returned
     function IsEdgeTopOrBottom(abEdge: TAppBarEdge): Boolean;
-
-    // Returns TRUE if abEdge is ABE_FLOAT, else FALSE is returned
     function IsFloating(abEdge: TAppBarEdge): Boolean;
-
-    // Returns TRUE if abFlags contain an at least allowed edge to dock on
     function IsDockable(abFlags: TAppBarFlags): Boolean;
-
-    // Returns TRUE if abFlags contain abfAllowLeft and abfAllowRight
     function IsDockableVertically(abFlags: TAppBarFlags): Boolean;
-
-    // Returns TRUE if abFlags contain abfAllowTop and abfAllowBottom
     function IsDockableHorizontally(abFlags: TAppBarFlags): Boolean;
-
     // Forces the shell to update its AppBar list and the workspace area
     procedure ResetSystemKnowledge;
 
     // Returns a proposed edge or ABE_FLOAT based on ABF_* flags and a
     // point specified in screen coordinates
     function GetEdgeFromPoint(abFlags: TAppBarFlags; pt: TSmallPoint): TAppBarEdge;
-
   public
     // Constructs an AppBar
     constructor Create(Owner: TComponent); override;
@@ -332,85 +317,59 @@ uses
 
 { Internal implementation functions }
 
-// TAppBar.CreateParams ///////////////////////////////////////////////////////
 procedure TAppBar.CreateParams(var Params: TCreateParams);
 var
   dwAdd, dwRemove, dwAddEx, dwRemoveEx: DWORD;
 begin
-  // Call the inherited first
   inherited CreateParams(Params);
 
-  // Styles to be added
   dwAdd := 0;
   dwAddEx := WS_EX_TOOLWINDOW;
 
-  // Styles to be removed
   dwRemove := WS_SYSMENU or WS_MAXIMIZEBOX or WS_MINIMIZEBOX;
   dwRemoveEx := WS_EX_APPWINDOW;
 
-  // Modify style flags
-  with Params do
-    begin
-      Style := Style and (not dwRemove);
-      Style := Style or dwAdd;
-      ExStyle := ExStyle and (not dwRemoveEx);
-      ExStyle := ExStyle or dwAddEx;
-    end;
+  Params.Style := Params.Style and (not dwRemove) or dwAdd;
+  Params.ExStyle := Params.ExStyle and (not dwRemoveEx) or dwAddEx;
 end;
 
-// TAppBar.AppBarMessage //////////////////////////////////////////////////////
-function TAppBar.AppBarMessage(abMessage: TAppBarMessage; abEdge: TAppBarEdge; lParam: lParam; bRect: Boolean; var rc: TRect): UINT;
+function TAppBar.AppBarMessage(abMessage: TAppBarMessage; abEdge: TAppBarEdge; lParam: lParam; var rc: TRect): UINT;
 var
   abd: TAppBarData;
 begin
-  // Initialize an APPBARDATA structure
   abd.cbSize := sizeof(abd);
   abd.hWnd := Handle;
   abd.uCallbackMessage := WM_APPBARNOTIFY;
   abd.uEdge := Ord(abEdge);
-  if bRect then
-    abd.rc := rc
-  else
-    abd.rc := Rect(0, 0, 0, 0);
+  abd.rc := rc;
   abd.lParam := lParam;
   Result := SHAppBarMessage(Ord(abMessage), abd);
-
-  // If the caller passed a rectangle, return the updated rectangle
-  if bRect then
-    rc := abd.rc;
+  rc := abd.rc;
 end;
 
-// TAppBar.AppBarMessage1 /////////////////////////////////////////////////////
 function TAppBar.AppBarMessage1(abMessage: TAppBarMessage): UINT;
-var
-  rc: TRect;
 begin
-  Result := AppBarMessage(abMessage, abeFloat, 0, False, rc);
+  Result := AppBarMessage2(abMessage, abeFloat);
 end;
 
-// TAppBar.AppBarMessage2 /////////////////////////////////////////////////////
 function TAppBar.AppBarMessage2(abMessage: TAppBarMessage; abEdge: TAppBarEdge): UINT;
-var
-  rc: TRect;
 begin
-  Result := AppBarMessage(abMessage, abEdge, 0, False, rc);
+  Result := AppBarMessage3(abMessage, abEdge, 0);
 end;
 
-// TAppBar.AppBarMessage3 /////////////////////////////////////////////////////
 function TAppBar.AppBarMessage3(abMessage: TAppBarMessage; abEdge: TAppBarEdge; lParam: lParam): UINT;
 var
   rc: TRect;
 begin
-  Result := AppBarMessage(abMessage, abEdge, lParam, False, rc);
+  rc := TRect.Empty;
+  Result := AppBarMessage(abMessage, abEdge, lParam, rc);
 end;
 
-// TAppBar.AppBarMessage4 /////////////////////////////////////////////////////
 function TAppBar.AppBarMessage4(abMessage: TAppBarMessage; abEdge: TAppBarEdge; lParam: lParam; var rc: TRect): UINT;
 begin
-  Result := AppBarMessage(abMessage, abEdge, lParam, True, rc);
+  Result := AppBarMessage(abMessage, abEdge, lParam, rc);
 end;
 
-// TAppBar.CalcProposedState //////////////////////////////////////////////////
 function TAppBar.CalcProposedState(var pt: TSmallPoint): TAppBarEdge;
 var
   bForceFloat: Boolean;
@@ -424,7 +383,6 @@ begin
     Result := GetEdgeFromPoint(FABS.abFlags, pt);
 end;
 
-// TAppBar.GetRect ////////////////////////////////////////////////////////////
 procedure TAppBar.GetRect(abEdgeProposed: TAppBarEdge; var rcProposed: TRect);
 begin
   // This function finds the x, y, cx, cy of the AppBar window
@@ -452,12 +410,10 @@ begin
           rcProposed.Left := rcProposed.Right - FABS.szDockSize.cx;
         abeBottom:
           rcProposed.Top := rcProposed.Bottom - FABS.szDockSize.cy;
-      end; // end of case
-
-    end; // end of else
+      end;
+    end;
 end;
 
-// TAppBar.AdjustLocationForAutohide //////////////////////////////////////////
 function TAppBar.AdjustLocationForAutohide(bShow: Boolean; var rc: TRect): Boolean;
 var
   x, y: Integer;
@@ -470,7 +426,6 @@ begin
       Result := False;
       Exit;
     end;
-
   // Showing/hiding doesn't change our size; only our position
   x := 0;
   y := 0; // Assume a position of (0, 0)
@@ -479,9 +434,9 @@ begin
     // If we are on the right or bottom, calculate our visible position
     case GetEdge of
       abeRight:
-        x := Self.Monitor.BoundsRect.Right - (rc.Right - rc.Left);
+        x := Self.Monitor.BoundsRect.Right - rc.Width;
       abeBottom:
-        y := Self.Monitor.BoundsRect.Bottom - (rc.Bottom - rc.Top);
+        y := Self.Monitor.BoundsRect.Bottom - rc.Height;
     end
   else
     begin
@@ -492,35 +447,26 @@ begin
       // Calculate our x or y coordinate so that only the border is visible
       case GetEdge of
         abeLeft:
-          x := -((rc.Right - rc.Left) - cxVisibleBorder);
+          x := -(rc.Width - cxVisibleBorder);
         abeRight:
           x := Self.Monitor.BoundsRect.Right - cxVisibleBorder;
         abeTop:
-          y := -((rc.Bottom - rc.Top) - cyVisibleBorder);
+          y := -(rc.Height - cyVisibleBorder);
         abeBottom:
           y := Self.Monitor.BoundsRect.Bottom - cyVisibleBorder;
       end;
     end;
-
-  with rc do
-    begin
-      Right := x + (Right - Left);
-      Bottom := y + (Bottom - Top);
-      Left := x;
-      Top := y;
-    end;
+  rc.SetLocation(x, y);
 
   Result := True;
 end;
 
-// TAppBar.ShowHiddenAppBar ///////////////////////////////////////////////////
 procedure TAppBar.ShowHiddenAppBar(bShow: Boolean);
 var
   rc: TRect;
 begin
   // Get our window location in screen coordinates
   GetWindowRect(Handle, rc);
-
   // Assume  that we are visible
   FbAutoHideIsVisible := True;
 
@@ -529,15 +475,12 @@ begin
       // the rectangle was adjusted, we are an autohide bar
       // Remember whether we are visible or not
       FbAutoHideIsVisible := bShow;
-
       // Slide window in from or out to the edge
       SlideWindow(rc);
-
       FTimer.Enabled := bShow;
     end;
 end;
 
-// TAppBar.SlideWindow ////////////////////////////////////////////////////////
 procedure TAppBar.SlideWindow(var rcEnd: TRect);
 var
   bFullDragOn: LongBool;
@@ -552,7 +495,6 @@ begin
   GetWindowRect(Handle, rcStart);
   if (FABS.bSlideEffect and bFullDragOn and ((rcStart.Left <> rcEnd.Left) or (rcStart.Top <> rcEnd.Top) or (rcStart.Right <> rcEnd.Right) or (rcStart.Bottom <> rcEnd.Bottom))) then
     begin
-
       // Get our starting and ending time
       dwTimeStart := GetTickCount;
       dwTimeEnd := dwTimeStart + Cardinal(FABS.nTimerInterval);
@@ -561,15 +503,11 @@ begin
         begin
           // While we are still sliding, calculate our new position
           x := rcStart.Left - (rcStart.Left - rcEnd.Left) * Integer(dwTime - dwTimeStart) div Integer(FABS.nTimerInterval);
-
           y := rcStart.Top - (rcStart.Top - rcEnd.Top) * Integer(dwTime - dwTimeStart) div Integer(FABS.nTimerInterval);
-
-          w := (rcStart.Right - rcStart.Left) - ((rcStart.Right - rcStart.Left) - (rcEnd.Right - rcEnd.Left)) * Integer(dwTime - dwTimeStart) div Integer(FABS.nTimerInterval);
-
-          h := (rcStart.Bottom - rcStart.Top) - ((rcStart.Bottom - rcStart.Top) - (rcEnd.Bottom - rcEnd.Top)) * Integer(dwTime - dwTimeStart) div Integer(FABS.nTimerInterval);
-
+          w := rcStart.Width - (rcStart.Width - rcEnd.Width) * Integer(dwTime - dwTimeStart) div Integer(FABS.nTimerInterval);
+          h := rcStart.Height - (rcStart.Height - rcEnd.Height) * Integer(dwTime - dwTimeStart) div Integer(FABS.nTimerInterval);
           // Show the window at its changed position
-          SetWindowPos(Handle, 0, x, y, w, h, SWP_NOZORDER or SWP_NOACTIVATE or SWP_DRAWFRAME);
+          SetWindowPos(Handle, 0, x, y, w, h, SWP_NOZORDER or SWP_NOACTIVATE {or SWP_DRAWFRAME});
           UpdateWindow(Handle);
           dwTime := GetTickCount;
         end;
@@ -579,38 +517,28 @@ begin
   BoundsRect := rcEnd;
 end;
 
-// TAppBar.GetAutohideEdge ////////////////////////////////////////////////////
 function TAppBar.GetAutohideEdge: TAppBarEdge;
+var
+  abe: TAppBarEdge;
 begin
-  if Handle = AppBarMessage2(abmGetAutoHideBar, abeLeft) then
-    Result := abeLeft
-  else
-    if Handle = AppBarMessage2(abmGetAutoHideBar, abeTop) then
-      Result := abeTop
-    else
-      if Handle = AppBarMessage2(abmGetAutoHideBar, abeRight) then
-        Result := abeRight
-      else
-        if Handle = AppBarMessage2(abmGetAutoHideBar, abeBottom) then
-          Result := abeBottom
-        else
-          // NOTE: If AppBar is docked but not auto-hidden, we return ABE_UNKNOWN
-          Result := abeUnknown;
+  Result := abeUnknown;
+  for abe := abeLeft to abeBottom do
+    if Handle = AppBarMessage2(abmGetAutoHideBar, abe) then
+      begin
+        Result := abe;
+        Break;
+      end;
 end;
 
-// TAppBar.GetMessagePosition /////////////////////////////////////////////////
 function TAppBar.GetMessagePosition: TSmallPoint;
 var
-  pt: TSmallPoint;
   dw: DWORD;
 begin
   dw := GetMessagePos;
-  pt.x := SHORT(dw);
-  pt.y := SHORT((dw and $FFFF0000) shr 16);
-  Result := pt;
+  Result.x := LongRec(dw).Lo;
+  Result.y := LongRec(dw).Hi;
 end;
 
-// TAppBar.ModifyStyle ////////////////////////////////////////////////////////
 function TAppBar.ModifyStyle(hWnd: THandle; nStyleOffset: Integer; dwRemove: DWORD; dwAdd: DWORD; nFlags: UINT): Boolean;
 var
   dwStyle: DWORD;
@@ -627,15 +555,14 @@ begin
 
   SetWindowLong(hWnd, nStyleOffset, dwNewStyle);
 
-  // if nFlags <> 0 then
-  SetWindowPos(hWnd, 0, 0, 0, 0, 0, SWP_NOSIZE or SWP_NOMOVE or SWP_NOZORDER or SWP_NOACTIVATE or nFlags);
+  if nFlags <> 0 then
+    SetWindowPos(hWnd, 0, 0, 0, 0, 0, SWP_NOSIZE or SWP_NOMOVE or SWP_NOZORDER or SWP_NOACTIVATE or nFlags);
 
   Result := True;
 end;
 
 { Property selector functions }
 
-// TAppBar.GetEdge ////////////////////////////////////////////////////////////
 function TAppBar.GetEdge: TAppBarEdge;
 begin
   if FabEdgeProposedPrev <> abeUnknown then
@@ -644,7 +571,6 @@ begin
     Result := FABS.abEdge;
 end;
 
-// TAppBar.SetEdge ////////////////////////////////////////////////////////////
 procedure TAppBar.SetEdge(abEdge: TAppBarEdge);
 var
   abCurrentEdge: TAppBarEdge;
@@ -678,7 +604,6 @@ begin
         currentRect := Rect(0, 0, 0, 0);
         AppBarMessage4(abmSetPos, abEdge, lParam(False), currentRect);
         SetBounds(FABS.rcFloat.Left, FABS.rcFloat.Top, FABS.rcFloat.Width, FABS.rcFloat.Height);
-        BorderStyle := FABS.FloatedBorderStyle;
       end;
   else
     begin
@@ -705,8 +630,8 @@ begin
       AdjustLocationForAutohide(FbAutoHideIsVisible, rc);
       // Slide window in from or out to the edge
       SlideWindow(rc);
-    end; // end of else
-  end; // end of case
+    end;
+  end;
 
   // Set the AppBar's z-order appropriately
   hWnd := HWND_NOTOPMOST; // Assume normal Z-Order
@@ -719,29 +644,14 @@ begin
         // of the z-order so that we don't cover the full-screen window
         hWnd := HWND_BOTTOM;
     end;
-  SetWindowPos(Handle, hWnd, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE);
+  SetWindowPos(Handle, hWnd, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE{ or SWP_DRAWFRAME});
   // Make sure that any auto-hide appbars stay on top of us after we move
   // even though our activation state has not changed
   AppBarMessage1(abmActivate);
   // Tell our derived class that there is a state change
   OnAppBarStateChange(False, abEdge);
-  // Show or hide the taskbar entry depending on AppBar position
-  case FABS.abTaskEntry of
-    abtShow:
-      ShowWindow(Application.Handle, SW_SHOW);
-    abtHide:
-      ShowWindow(Application.Handle, SW_HIDE);
-    abtFloatDependent:
-      case abEdge of
-        abeFloat:
-          ShowWindow(Application.Handle, SW_SHOW);
-        abeLeft, abeTop, abeRight, abeBottom:
-          ShowWindow(Application.Handle, SW_HIDE);
-      end;
-  end;
 end;
 
-// TAppBar.SetSlideTime ///////////////////////////////////////////////////////
 procedure TAppBar.SetSlideTime(nInterval: Cardinal);
 begin
   FABS.nTimerInterval := nInterval;
@@ -750,7 +660,6 @@ end;
 
 { Overridable functions }
 
-// TAppBar.OnAppBarStateChange ////////////////////////////////////////////////
 procedure TAppBar.OnAppBarStateChange(bProposed: Boolean; abEdgeProposed: TAppBarEdge);
 var
   bFullDragOn: LongBool;
@@ -763,23 +672,22 @@ begin
     begin
       if abEdgeProposed = abeFloat then
         // Show the window adornments
-        ModifyStyle(Handle, GWL_STYLE, 0, WS_CAPTION or WS_SYSMENU, SWP_DRAWFRAME)
+        ModifyStyle(Handle, GWL_STYLE, 0, 0{WS_CAPTION or WS_SYSMENU}, 0{SWP_DRAWFRAME})
       else
         // Hide the window adornments
-        ModifyStyle(Handle, GWL_STYLE, WS_CAPTION or WS_SYSMENU, 0, SWP_DRAWFRAME);
+        ModifyStyle(Handle, GWL_STYLE, 0{WS_CAPTION or WS_SYSMENU}, 0, 0{SWP_DRAWFRAME});
     end;
 end;
 
-// TAppBar.OnAppBarForcedToDocked /////////////////////////////////////////////
 procedure TAppBar.OnAppBarForcedToDocked;
 const
   CRLF = #10#13;
 begin
   // Display the application name as the message box caption text.
-  MessageDlg('There is already an auto hidden window on this edge.' + CRLF + 'Only one auto hidden window is allowed on each edge.', mtInformation, [mbOk], 0);
+  MessageDlg('There is already an auto hidden window on this edge.' + CRLF + //
+    'Only one auto hidden window is allowed on each edge.', mtInformation, [mbOk], 0);
 end;
 
-// TAppBar.OnABNFullScreenApp /////////////////////////////////////////////////
 procedure TAppBar.OnABNFullScreenApp(bOpen: Boolean);
 begin
   // This function is called when a FullScreen window is openning or
@@ -797,7 +705,6 @@ begin
   UpdateBar;
 end;
 
-// TAppBar.OnABNPosChanged ////////////////////////////////////////////////////
 procedure TAppBar.OnABNPosChanged;
 begin
   // The TaskBar or another AppBar has changed its size or position
@@ -807,7 +714,6 @@ begin
     UpdateBar;
 end;
 
-// TAppBar.OnABNWindowArrange /////////////////////////////////////////////////
 procedure TAppBar.OnABNWindowArrange(bBeginning: Boolean);
 begin
   // This function intentionally left blank
@@ -815,7 +721,6 @@ end;
 
 { Message handlers }
 
-// TAppBar.OnAppBarCallbackMsg ////////////////////////////////////////////////
 procedure TAppBar.OnAppBarCallbackMsg(var Msg: TMessage);
 begin
   case Msg.WParam of
@@ -828,7 +733,6 @@ begin
   end;
 end;
 
-// TAppBar.OnWindowPosChanged /////////////////////////////////////////////////
 procedure TAppBar.OnWindowPosChanged(var Msg: TWMWindowPosChanged);
 begin
   inherited;
@@ -838,20 +742,19 @@ begin
   AppBarMessage1(abmWindowPosChanged);
 end;
 
-// TAppBar.OnActivate /////////////////////////////////////////////////////////
 procedure TAppBar.OnActivate(var Msg: TWMActivate);
 begin
   inherited;
   if Msg.Active = WA_INACTIVE then
     // Hide the AppBar if we are docked and auto-hidden
-    ShowHiddenAppBar(False);
-  // When our window changes position, tell the Shell so that any
-  // auto-hidden AppBar on our edge stays on top of our window making it
-  // always accessible to the user.
-  AppBarMessage1(abmActivate);
+    ShowHiddenAppBar(False)
+  else
+    // When our window changes position, tell the Shell so that any
+    // auto-hidden AppBar on our edge stays on top of our window making it
+    // always accessible to the user.
+    AppBarMessage1(abmActivate);
 end;
 
-// TAppBar.OnAppBarTimer //////////////////////////////////////////////////////
 procedure TAppBar.OnAppBarTimer(Sender: TObject);
 var
   pt: TSmallPoint;
@@ -876,7 +779,6 @@ begin
   inherited;
 end;
 
-// TAppBar.OnNcMouseMove //////////////////////////////////////////////////////
 procedure TAppBar.OnNcMouseMove(var Msg: TWMNCMouseMove);
 begin
   // If we are a docked, auto-hidden AppBar, shown us
@@ -885,10 +787,8 @@ begin
   inherited;
 end;
 
-// TAppBar.OnNcHitTest ////////////////////////////////////////////////////////
 procedure TAppBar.OnNcHitTest(var Msg: TWMNCHitTest);
 var
-  u: UINT;
   bPrimaryMouseBtnDown: Boolean;
   rcClient: TRect;
   pt: TPoint;
@@ -896,7 +796,6 @@ var
 begin
   // Find out what the system thinks is the hit test code
   inherited;
-  u := Msg.Result;
 
   // NOTE: If the user presses the secondary mouse button, pretend that the
   // user clicked on the client area so that we get WM_CONTEXTMENU messages
@@ -909,58 +808,27 @@ begin
   pt.x := Msg.XPos;
   pt.y := Msg.YPos;
   pt := ScreenToClient(pt);
-  if (u = HTCLIENT) and bPrimaryMouseBtnDown and (ControlAtPos(pt, False) = nil) then
+
+  if Assigned(ControlAtPos(pt, False)) then
+    Exit;
+
+  rcClient := ClientRect;
+  if (Msg.Result = HTCLIENT) and bPrimaryMouseBtnDown then
     // User clicked in client area, allow AppBar to move.  We get this
     // behavior by pretending that the user clicked on the caption area
-    u := HTCAPTION;
+      Msg.Result := HTCAPTION;
 
   // If the AppBar is floating and the hittest code is a resize code...
-  if ((GetEdge = abeFloat) and (HTSIZEFIRST <= u) and (u <= HTSIZELAST)) then
+  if GetEdge = abeFloat then
     begin
-      case u of
-        HTLEFT, HTRIGHT:
-          if FABS.szSizeInc.cx = 0 then
-            u := HTBORDER;
-        HTTOP, HTBOTTOM:
-          if FABS.szSizeInc.cy = 0 then
-            u := HTBORDER;
-        HTTOPLEFT:
-          if (FABS.szSizeInc.cx = 0) and (FABS.szSizeInc.cy = 0) then
-            u := HTBORDER
-          else
-            if (FABS.szSizeInc.cx = 0) and (FABS.szSizeInc.cy <> 0) then
-              u := HTTOP
-            else
-              if (FABS.szSizeInc.cx <> 0) and (FABS.szSizeInc.cy = 0) then
-                u := HTLEFT;
-        HTTOPRIGHT:
-          if (FABS.szSizeInc.cx = 0) and (FABS.szSizeInc.cy = 0) then
-            u := HTBORDER
-          else
-            if (FABS.szSizeInc.cx = 0) and (FABS.szSizeInc.cy <> 0) then
-              u := HTTOP
-            else
-              if (FABS.szSizeInc.cx <> 0) and (FABS.szSizeInc.cy = 0) then
-                u := HTRIGHT;
-        HTBOTTOMLEFT:
-          if (FABS.szSizeInc.cx = 0) and (FABS.szSizeInc.cy = 0) then
-            u := HTBORDER
-          else
-            if (FABS.szSizeInc.cx = 0) and (FABS.szSizeInc.cy <> 0) then
-              u := HTBOTTOM
-            else
-              if (FABS.szSizeInc.cx <> 0) and (FABS.szSizeInc.cy = 0) then
-                u := HTLEFT;
-        HTBOTTOMRIGHT:
-          if (FABS.szSizeInc.cx = 0) and (FABS.szSizeInc.cy = 0) then
-            u := HTBORDER
-          else
-            if (FABS.szSizeInc.cx = 0) and (FABS.szSizeInc.cy <> 0) then
-              u := HTBOTTOM
-            else
-              if (FABS.szSizeInc.cx <> 0) and (FABS.szSizeInc.cy = 0) then
-                u := HTRIGHT;
-      end;
+      if (pt.x <= 10) then
+        Msg.Result := HTLEFT
+      else
+      if ((rcClient.Width - 10) <= pt.x) then
+        Msg.Result := HTRIGHT
+      else
+        if Msg.Result <> HTCAPTION  then
+          MSG.Result:=HTBORDER;
     end;
 
   // When the AppBar is docked, the user can resize only one edge.
@@ -968,61 +836,42 @@ begin
   // To allow resizing, the AppBar window must have the WS_THICKFRAME style
 
   // If the AppBar is docked and the hittest code is a resize code...
-  if (GetEdge <> abeFloat) and (GetEdge <> abeUnknown) { and (HTSIZEFIRST <= u) and (u <= HTSIZELAST)) } then
+  if not (GetEdge in [abeFloat, abeUnknown]) then
     begin
-
       if (IsEdgeLeftOrRight(GetEdge) and (FABS.szSizeInc.cx = 0)) or (not IsEdgeLeftOrRight(GetEdge) and (FABS.szSizeInc.cy = 0)) then
         begin
           // If the width/height size increment is zero, then resizing is NOT
           // allowed for the edge that the AppBar is docked on
-          u := HTBORDER; // Pretend that the mouse is not on a resize border
+          Msg.Result := HTBORDER; // Pretend that the mouse is not on a resize border
         end
       else
         begin
           // Resizing IS allowed for the edge that the AppBar is docked on
           // Get the location of the appbar's client area in screen coordinates
-          rcClient := GetClientRect;
-          pt.x := rcClient.Left;
-          pt.y := rcClient.Top;
-          pt := ClientToScreen(pt);
-          rcClient.Left := pt.x;
-          rcClient.Top := pt.y;
-
-          pt.x := rcClient.Right;
-          pt.y := rcClient.Bottom;
-          pt := ClientToScreen(pt);
-          rcClient.Right := pt.x;
-          rcClient.Bottom := pt.y;
-
           case GetEdge of
             abeLeft:
-              if Msg.XPos > (rcClient.Right - 4) then
-                u := HTRIGHT;
+              if pt.X > (rcClient.Right - 4) then
+                Msg.Result := HTRIGHT;
             abeTop:
-              if Msg.YPos > (rcClient.Bottom - 4) then
-                u := HTBOTTOM;
+              if pt.Y > (rcClient.Bottom - 4) then
+                Msg.Result := HTBOTTOM;
             abeRight:
-              if Msg.XPos < (rcClient.Left + 4) then
-                u := HTLEFT;
+              if pt.X < (rcClient.Left + 4) then
+                Msg.Result := HTLEFT;
             abeBottom:
-              if Msg.YPos < (rcClient.Top + 4) then
-                u := HTTOP;
-          end; // end of case
-        end; // end of else
+              if pt.Y < (rcClient.Top + 4) then
+                Msg.Result := HTTOP;
+          end;
+        end;
     end;
-
-  // Return the hittest code
-  Msg.Result := u;
 end;
 
-// TAppBar.OnEnterSizeMove ////////////////////////////////////////////////////
 procedure TAppBar.OnEnterSizeMove(var Msg: TMessage);
 begin
   // The user started moving/resizing the AppBar, save its current state
   FabEdgeProposedPrev := GetEdge;
 end;
 
-// TAppBar.OnExitSizeMove /////////////////////////////////////////////////////
 procedure TAppBar.OnExitSizeMove(var Msg: TMessage);
 var
   abEdgeProposedPrev: TAppBarEdge;
@@ -1058,7 +907,6 @@ begin
       if GetEdge = abeFloat then
         begin
           FABS.rcFloat := rc;
-          FABS.FloatedBorderStyle := BorderStyle;
           // If AppBar was docked and is going to float...
         end
       else
@@ -1074,8 +922,7 @@ begin
               h := FABS.rcFloat.Bottom - FABS.rcFloat.Top;
             end;
           // Save new floating position
-          FABS.rcFloat := TRect.Create(rc.TopLeft, rc.Left + w, rc.Top + h);
-          FABS.FloatedBorderStyle := BorderStyle;
+          FABS.rcFloat := TRect.Create(rc.TopLeft, w, h);
         end;
     end;
 
@@ -1083,13 +930,11 @@ begin
   SetEdge(abEdgeProposedPrev);
 end;
 
-// TAppBar.OnMoving ///////////////////////////////////////////////////////////
 procedure TAppBar.OnMoving(var Msg: TMessage);
 var
   prc: PRect;
   pt: TSmallPoint;
   abEdgeProposed: TAppBarEdge;
-  w, h: Integer;
 begin
   // We control the moving of the AppBar.  For example, if the mouse moves
   // close to an edge, we want to dock the AppBar
@@ -1108,12 +953,7 @@ begin
       // the float state.  We have to calculate a rectangle location so that
       // the mouse cursor stays inside the window.
       prc^ := FABS.rcFloat;
-      w := prc^.Right - prc^.Left;
-      h := prc^.Bottom - prc^.Top;
-      prc.Left := pt.x - w div 2;
-      prc.Top := pt.y;
-      prc.Right := pt.x - w div 2 + w;
-      prc.Bottom := pt.y + h;
+      prc.SetLocation(pt.x - prc.Width div 2, pt.y);
     end;
 
   // Remember the most-recently proposed state
@@ -1126,7 +966,6 @@ begin
   OnAppBarStateChange(True, abEdgeProposed);
 end;
 
-// TAppBar.OnSizing ///////////////////////////////////////////////////////////
 procedure TAppBar.OnSizing(var Msg: TMessage);
 var
   prc: PRect;
@@ -1152,58 +991,48 @@ begin
   // member.  From the new, proposed window dimensions passed to us, round
   // the width/height to the nearest discrete unit
   if FABS.szSizeInc.cx <> 0 then
-    nWidthNew := ((prc^.Right - prc^.Left) - (rcBorder.Right - rcBorder.Left) + FABS.szSizeInc.cx div 2) div FABS.szSizeInc.cx * FABS.szSizeInc.cx +
-      (rcBorder.Right - rcBorder.Left)
+    nWidthNew := (prc.Width - rcBorder.Width + FABS.szSizeInc.cx div 2) div FABS.szSizeInc.cx * FABS.szSizeInc.cx + rcBorder.Width
   else
-    nWidthNew := prc^.Right - prc^.Left;
+    nWidthNew := prc.Width;
 
   if FABS.szSizeInc.cy <> 0 then
-    nHeightNew := ((prc^.Bottom - prc^.Top) - (rcBorder.Bottom - rcBorder.Top) + FABS.szSizeInc.cy div 2) div FABS.szSizeInc.cy * FABS.szSizeInc.cy +
-      (rcBorder.Bottom - rcBorder.Top)
+    nHeightNew := (prc.Height - rcBorder.Height + FABS.szSizeInc.cy div 2) div FABS.szSizeInc.cy * FABS.szSizeInc.cy + rcBorder.Height
   else
-    nHeightNew := prc^.Bottom - prc^.Top;
+    nHeightNew := prc.Height;
 
   // Adjust the rectangle's dimensions
   case Msg.WParam of
     WMSZ_LEFT:
-      prc^.Left := prc^.Right - nWidthNew;
-
+      prc.Left := prc.Right - nWidthNew;
     WMSZ_TOP:
-      prc^.Top := prc^.Bottom - nHeightNew;
-
+      prc.Top := prc.Bottom - nHeightNew;
     WMSZ_RIGHT:
-      prc^.Right := prc^.Left + nWidthNew;
-
+      prc.Right := prc.Left + nWidthNew;
     WMSZ_BOTTOM:
-      prc^.Bottom := prc^.Top + nHeightNew;
-
+      prc.Bottom := prc.Top + nHeightNew;
     WMSZ_BOTTOMLEFT:
       begin
-        prc^.Bottom := prc^.Top + nHeightNew;
-        prc^.Left := prc^.Right - nWidthNew;
+        prc.Bottom := prc.Top + nHeightNew;
+        prc.Left := prc.Right - nWidthNew;
       end;
-
     WMSZ_BOTTOMRIGHT:
       begin
-        prc^.Bottom := prc^.Top + nHeightNew;
-        prc^.Right := prc^.Left + nWidthNew;
+        prc.Bottom := prc.Top + nHeightNew;
+        prc.Right := prc.Left + nWidthNew;
       end;
-
     WMSZ_TOPLEFT:
       begin
-        prc^.Left := prc^.Right - nWidthNew;
-        prc^.Top := prc^.Bottom - nHeightNew;
+        prc.Left := prc.Right - nWidthNew;
+        prc.Top := prc.Bottom - nHeightNew;
       end;
-
     WMSZ_TOPRIGHT:
       begin
-        prc^.Top := prc^.Bottom - nHeightNew;
-        prc^.Right := prc^.Left + nWidthNew;
+        prc.Top := prc.Bottom - nHeightNew;
+        prc.Right := prc.Left + nWidthNew;
       end;
-  end; // end of case
+  end;
 end;
 
-// TAppBar.OnGetMinMaxInfo ////////////////////////////////////////////////////
 procedure TAppBar.OnGetMinMaxInfo(var Msg: TWMGetMinMaxInfo);
 begin
   if GetEdge = abeFloat then
@@ -1230,43 +1059,36 @@ end;
 
 { AppBar-specific helper functions }
 
-// TAppBar.IsEdgeLeftOrRight //////////////////////////////////////////////////
 function TAppBar.IsEdgeLeftOrRight(abEdge: TAppBarEdge): Boolean;
 begin
   Result := (abEdge in [abeLeft, abeRight]);
 end;
 
-// TAppBar.IsEdgeTopOrBottom //////////////////////////////////////////////////
 function TAppBar.IsEdgeTopOrBottom(abEdge: TAppBarEdge): Boolean;
 begin
   Result := (abEdge in [abeTop, abeBottom]);
 end;
 
-// TAppBar.IsFloating /////////////////////////////////////////////////////////
 function TAppBar.IsFloating(abEdge: TAppBarEdge): Boolean;
 begin
   Result := (abEdge = abeFloat);
 end;
 
-// TAppBar.IsDockable /////////////////////////////////////////////////////////
 function TAppBar.IsDockable(abFlags: TAppBarFlags): Boolean;
 begin
   Result := ((abFlags * [abfAllowLeft .. abfAllowBottom]) <> []);
 end;
 
-// TAppBar.IsDockableVertically ///////////////////////////////////////////////
 function TAppBar.IsDockableVertically(abFlags: TAppBarFlags): Boolean;
 begin
   Result := ((abFlags * [abfAllowLeft, abfAllowRight]) <> []);
 end;
 
-// TAppBar.IsDockableHorizontally /////////////////////////////////////////////
 function TAppBar.IsDockableHorizontally(abFlags: TAppBarFlags): Boolean;
 begin
   Result := ((abFlags * [abfAllowTop, abfAllowBottom]) <> []);
 end;
 
-// TAppBar.ResetSystemKnowledge ///////////////////////////////////////////////
 procedure TAppBar.ResetSystemKnowledge;
 {$IFDEF DEBUG}
 var
@@ -1283,7 +1105,6 @@ begin
 end;
 {$ENDIF}
 
-// TAppBar.GetEdgeFromPoint ///////////////////////////////////////////////////
 function TAppBar.GetEdgeFromPoint(abFlags: TAppBarFlags; pt: TSmallPoint): TAppBarEdge;
 var
   rc: TRect;
@@ -1371,7 +1192,6 @@ end;
 
 { Public member functions }
 
-// TAppBar.Create /////////////////////////////////////////////////////////////
 constructor TAppBar.Create(Owner: TComponent);
   procedure InitStruct;
   begin
@@ -1388,7 +1208,6 @@ constructor TAppBar.Create(Owner: TComponent);
     FABS.szDockSize.cx := AB_DEF_DOCK_SIZE;
     FABS.szDockSize.cy := AB_DEF_DOCK_SIZE;
     FABS.rcFloat := Self.BoundsRect;
-    FABS.FloatedBorderStyle := BorderStyle;
     FABS.nMinWidth := 0;
     FABS.nMinHeight := 0;
     FABS.nMaxWidth := Self.Monitor.BoundsRect.Width;
@@ -1444,7 +1263,6 @@ begin
   InitAppbar;
 end;
 
-// TAppBar.Destroy ////////////////////////////////////////////////////////////
 destructor TAppBar.Destroy;
 begin
   FTimer.Free;
@@ -1457,7 +1275,6 @@ begin
   inherited Destroy;
 end;
 
-// TAppBar.UpdateBar //////////////////////////////////////////////////////////
 procedure TAppBar.UpdateBar;
 begin
   SetEdge(GetEdge);

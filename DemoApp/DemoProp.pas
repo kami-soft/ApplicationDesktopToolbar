@@ -4,7 +4,7 @@ interface
 
 uses
   Windows, SysUtils, Classes, Graphics, Forms, Controls, StdCtrls,
-  Buttons, ComCtrls, ExtCtrls;
+  Buttons, ComCtrls, ExtCtrls, MEssages;
 
 type
   TPropDlg = class(TForm)
@@ -106,6 +106,8 @@ type
   private
     procedure InitDialog;
     procedure ApplyChanges;
+
+    procedure OnNcHitTest(var Msg: TWMNCHitTest); message WM_NCHITTEST;
   end;
 
 var
@@ -190,6 +192,26 @@ begin
   lblSlideTime.Enabled   := chkSlideEffect.Checked;
   lblFaster.Enabled      := chkSlideEffect.Checked;
   lblSlower.Enabled      := chkSlideEffect.Checked;
+end;
+
+procedure TPropDlg.OnNcHitTest(var Msg: TWMNCHitTest);
+var
+  rcClient: TRect;
+  pt: TPoint;
+begin
+  inherited;
+  pt.x := Msg.XPos;
+  pt.y := Msg.YPos;
+  pt := ScreenToClient(pt);
+  rcClient := ClientRect;
+  if (pt.x <= 5) then
+        Msg.Result := HTLEFT
+      else
+      if ((rcClient.Width - 5) <= pt.x) then
+        Msg.Result := HTRIGHT
+      else
+        if Msg.Result <> HTCAPTION  then
+          MSG.Result:=HTBORDER;
 end;
 
 procedure TPropDlg.ApplyChanges;
