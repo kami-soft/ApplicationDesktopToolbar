@@ -1,0 +1,11 @@
+*.~*
+*.dcu
+*.local
+*.drc
+*.dsk
+*.exe
+*.identcache
+*.map
+*.res
+*.stat
+*.dof
