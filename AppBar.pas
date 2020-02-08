@@ -119,6 +119,7 @@ type
     szSizeInc: TSize; // Discrete width/height size increments
     szDockSize: TSize; // Width/Height for docked bar
     rcFloat: TRect; // Floating rectangle in screen coordinates
+    FloatedBorderStyle: TBorderStyle;
     nMinWidth: Integer; // Min allowed width
     nMinHeight: Integer; // Min allowed height
     nMaxWidth: Integer; // Max allowed width
@@ -134,7 +135,6 @@ type
     { Internal implementation state variables }
     // This AppBar's settings info
     FABS: TAppBarSettings;
-
     // We need a member variable which tracks the proposed edge of the
     // AppBar while the user is moving it, deciding where to position it.
     // While not moving, this member must contain ABE_UNKNOWN so that
@@ -143,20 +143,14 @@ type
     // proposed edge based on the position of the AppBar.  The proposed
     // edge becomes the new edge when the user stops moving the AppBar.
     FabEdgeProposedPrev: TAppBarEdge;
-
     // We need a member variable which tracks whether a full screen
     // application window is open
     FbFullScreenAppOpen: Boolean;
-
     // We need a member variable which tracks whether our autohide window
     // is visible or not
     FbAutoHideIsVisible: Boolean;
-
     // We need a timer to to determine when the AppBar should be re-hidden
     FTimer: TTimer;
-
-    { Internal implementation functions }
-    procedure InitStruct;
 
     // These functions encapsulate the shell's SHAppBarMessage function
     function AppBarMessage(abMessage: TAppBarMessage; abEdge: TAppBarEdge; lParam: lParam; bRect: Boolean; var rc: TRect): UINT;
@@ -193,8 +187,6 @@ type
   protected
     // Modifies window creation flags
     procedure CreateParams(var Params: TCreateParams); override;
-    { Property selector functions }
-
     { Overridable functions }
     // Called when the AppBar's proposed state changes
     procedure OnAppBarStateChange(bProposed: Boolean; abEdgeProposed: TAppBarEdge); virtual;
@@ -211,10 +203,6 @@ type
     { Message handlers }
     // Called when the AppBar receives a WM_APPBARNOTIFY window message
     procedure OnAppBarCallbackMsg(var Msg: TMessage); message WM_APPBARNOTIFY;
-    // Called when the AppBar form is first created
-    procedure OnCreate(var Msg: TWMCreate); message WM_CREATE;
-    // Called when the AppBar form is about to be destroyed
-    procedure OnDestroy(var Msg: TWMDestroy); message WM_DESTROY;
     // Called when the AppBar receives a WM_WINDOWPOSCHANGED message
     procedure OnWindowPosChanged(var Msg: TWMWindowPosChanged); message WM_WINDOWPOSCHANGED;
 
@@ -282,9 +270,6 @@ type
     // Forces the AppBar's visual appearance to match its internal state
     procedure UpdateBar; virtual;
   published
-
-    { Properties }
-
     // Allowed dockable edges
     property Flags: TAppBarFlags read FABS.abFlags write FABS.abFlags;
 
@@ -692,10 +677,8 @@ begin
         // so that the workspace is not affected by the AppBar
         currentRect := Rect(0, 0, 0, 0);
         AppBarMessage4(abmSetPos, abEdge, lParam(False), currentRect);
-        Left := FABS.rcFloat.Left;
-        Top := FABS.rcFloat.Top;
-        Width := FABS.rcFloat.Right - FABS.rcFloat.Left;
-        Height := FABS.rcFloat.Bottom - FABS.rcFloat.Top;
+        SetBounds(FABS.rcFloat.Left, FABS.rcFloat.Top, FABS.rcFloat.Width, FABS.rcFloat.Height);
+        BorderStyle := FABS.FloatedBorderStyle;
       end;
   else
     begin
@@ -845,54 +828,6 @@ begin
   end;
 end;
 
-// TAppBar.OnCreate ///////////////////////////////////////////////////////////
-procedure TAppBar.OnCreate(var Msg: TWMCreate);
-var
-  hMenu: THandle;
-begin
-  inherited;
-  // Associate a timer with the AppBar.  The timer is used to determine
-  // when a visible, inactive, auto-hide AppBar should be re-hidden
-  FTimer := TTimer.Create(Self);
-  with FTimer do
-    begin
-      Interval := FABS.nTimerInterval;
-      OnTimer := OnAppBarTimer;
-      Enabled := False;
-    end;
-
-  // Save the initial position of the floating AppBar
-  FABS.rcFloat.Left := Left;
-  FABS.rcFloat.Top := Top;
-
-  // Register our AppBar window with the Shell
-  AppBarMessage1(abmNew);
-
-  // Update AppBar internal state
-  UpdateBar;
-
-  // Save the initial size of the floating AppBar
-  PostMessage(Handle, WM_ENTERSIZEMOVE, 0, 0);
-  PostMessage(Handle, WM_EXITSIZEMOVE, 0, 0);
-
-  // Remove system menu
-  hMenu := GetSystemMenu(Handle, False);
-  DeleteMenu(hMenu, SC_RESTORE, MF_BYCOMMAND);
-  DeleteMenu(hMenu, SC_MINIMIZE, MF_BYCOMMAND);
-  DeleteMenu(hMenu, SC_MAXIMIZE, MF_BYCOMMAND);
-end;
-
-// TAppBar.OnDestroy //////////////////////////////////////////////////////////
-procedure TAppBar.OnDestroy(var Msg: TWMDestroy);
-begin
-  // Free the Autohide timer
-  FTimer.Enabled := False;
-  FTimer.Free;
-  // Unregister our AppBar window with the Shell
-  SetEdge(abeUnknown);
-  inherited;
-end;
-
 // TAppBar.OnWindowPosChanged /////////////////////////////////////////////////
 procedure TAppBar.OnWindowPosChanged(var Msg: TWMWindowPosChanged);
 begin
@@ -1033,7 +968,7 @@ begin
   // To allow resizing, the AppBar window must have the WS_THICKFRAME style
 
   // If the AppBar is docked and the hittest code is a resize code...
-  if (GetEdge <> abeFloat) and (GetEdge <> abeUnknown) {and (HTSIZEFIRST <= u) and (u <= HTSIZELAST))} then
+  if (GetEdge <> abeFloat) and (GetEdge <> abeUnknown) { and (HTSIZEFIRST <= u) and (u <= HTSIZELAST)) } then
     begin
 
       if (IsEdgeLeftOrRight(GetEdge) and (FABS.szSizeInc.cx = 0)) or (not IsEdgeLeftOrRight(GetEdge) and (FABS.szSizeInc.cy = 0)) then
@@ -1064,13 +999,13 @@ begin
               if Msg.XPos > (rcClient.Right - 4) then
                 u := HTRIGHT;
             abeTop:
-              if Msg.YPos > (rcClient.Bottom-4) then
+              if Msg.YPos > (rcClient.Bottom - 4) then
                 u := HTBOTTOM;
             abeRight:
-              if Msg.XPos < (rcClient.Left+4) then
+              if Msg.XPos < (rcClient.Left + 4) then
                 u := HTLEFT;
             abeBottom:
-              if Msg.YPos < (rcClient.Top+4) then
+              if Msg.YPos < (rcClient.Top + 4) then
                 u := HTTOP;
           end; // end of case
         end; // end of else
@@ -1123,6 +1058,7 @@ begin
       if GetEdge = abeFloat then
         begin
           FABS.rcFloat := rc;
+          FABS.FloatedBorderStyle := BorderStyle;
           // If AppBar was docked and is going to float...
         end
       else
@@ -1138,10 +1074,8 @@ begin
               h := FABS.rcFloat.Bottom - FABS.rcFloat.Top;
             end;
           // Save new floating position
-          FABS.rcFloat.Left := rc.Left;
-          FABS.rcFloat.Top := rc.Top;
-          FABS.rcFloat.Right := rc.Left + w;
-          FABS.rcFloat.Bottom := rc.Top + h;
+          FABS.rcFloat := TRect.Create(rc.TopLeft, rc.Left + w, rc.Top + h);
+          FABS.FloatedBorderStyle := BorderStyle;
         end;
     end;
 
@@ -1176,13 +1110,10 @@ begin
       prc^ := FABS.rcFloat;
       w := prc^.Right - prc^.Left;
       h := prc^.Bottom - prc^.Top;
-      with prc^ do
-        begin
-          Left := pt.x - w div 2;
-          Top := pt.y;
-          Right := pt.x - w div 2 + w;
-          Bottom := pt.y + h;
-        end;
+      prc.Left := pt.x - w div 2;
+      prc.Top := pt.y;
+      prc.Right := pt.x - w div 2 + w;
+      prc.Bottom := pt.y + h;
     end;
 
   // Remember the most-recently proposed state
@@ -1318,38 +1249,6 @@ begin
 end;
 
 // TAppBar.IsDockable /////////////////////////////////////////////////////////
-procedure TAppBar.InitStruct;
-begin
-  // Set default state of AppBar to float with no width & height
-  FABS.cbSize := sizeof(TAppBarSettings);
-  FABS.abEdge := abeFloat;
-  FABS.abFlags := [abfAllowLeft .. abfAllowFloat];
-  FABS.bAutohide := False;
-  FABS.bAlwaysOnTop := True;
-  FABS.bSlideEffect := True;
-  FABS.nTimerInterval := SLIDE_DEF_TIMER_INTERVAL;
-  FABS.szSizeInc.cx := AB_DEF_SIZE_INC;
-  FABS.szSizeInc.cy := AB_DEF_SIZE_INC;
-  FABS.szDockSize.cx := AB_DEF_DOCK_SIZE;
-  FABS.szDockSize.cy := AB_DEF_DOCK_SIZE;
-  FABS.rcFloat.Left := 0;
-  FABS.rcFloat.Top := 0;
-  FABS.rcFloat.Right := 0;
-  FABS.rcFloat.Bottom := 0;
-  FABS.nMinWidth := 0;
-  FABS.nMinHeight := 0;
-  FABS.nMaxWidth := GetSystemMetrics(SM_CXSCREEN);
-  FABS.nMaxHeight := GetSystemMetrics(SM_CYSCREEN);
-  FABS.szMinDockSize.cx := 0;
-  FABS.szMinDockSize.cy := 0;
-  FABS.szMaxDockSize.cx := GetSystemMetrics(SM_CXSCREEN) div 2;
-  FABS.szMaxDockSize.cy := GetSystemMetrics(SM_CYSCREEN) div 2;
-  FABS.abTaskEntry := abtFloatDependent;
-  FabEdgeProposedPrev := abeUnknown;
-  FbFullScreenAppOpen := False;
-  FbAutoHideIsVisible := False;
-end;
-
 function TAppBar.IsDockable(abFlags: TAppBarFlags): Boolean;
 begin
   Result := ((abFlags * [abfAllowLeft .. abfAllowBottom]) <> []);
@@ -1474,6 +1373,64 @@ end;
 
 // TAppBar.Create /////////////////////////////////////////////////////////////
 constructor TAppBar.Create(Owner: TComponent);
+  procedure InitStruct;
+  begin
+    // Set default state of AppBar to float with no width & height
+    FABS.cbSize := sizeof(TAppBarSettings);
+    FABS.abEdge := abeFloat;
+    FABS.abFlags := [abfAllowLeft .. abfAllowFloat];
+    FABS.bAutohide := False;
+    FABS.bAlwaysOnTop := True;
+    FABS.bSlideEffect := True;
+    FABS.nTimerInterval := SLIDE_DEF_TIMER_INTERVAL;
+    FABS.szSizeInc.cx := AB_DEF_SIZE_INC;
+    FABS.szSizeInc.cy := AB_DEF_SIZE_INC;
+    FABS.szDockSize.cx := AB_DEF_DOCK_SIZE;
+    FABS.szDockSize.cy := AB_DEF_DOCK_SIZE;
+    FABS.rcFloat := Self.BoundsRect;
+    FABS.FloatedBorderStyle := BorderStyle;
+    FABS.nMinWidth := 0;
+    FABS.nMinHeight := 0;
+    FABS.nMaxWidth := Self.Monitor.BoundsRect.Width;
+    FABS.nMaxHeight := Self.Monitor.BoundsRect.Height;
+    FABS.szMinDockSize.cx := 0;
+    FABS.szMinDockSize.cy := 0;
+    FABS.szMaxDockSize.cx := FABS.nMaxWidth div 2;
+    FABS.szMaxDockSize.cy := FABS.nMaxHeight div 2;
+    FABS.abTaskEntry := abtFloatDependent;
+    FabEdgeProposedPrev := abeUnknown;
+    FbFullScreenAppOpen := False;
+    FbAutoHideIsVisible := False;
+  end;
+
+  procedure InitAppbar;
+  var
+    hMenu: THandle;
+  begin
+    // Associate a timer with the AppBar.  The timer is used to determine
+    // when a visible, inactive, auto-hide AppBar should be re-hidden
+    FTimer := TTimer.Create(Self);
+    FTimer.Enabled := False;
+    FTimer.Interval := FABS.nTimerInterval;
+    FTimer.OnTimer := OnAppBarTimer;
+
+    // Register our AppBar window with the Shell
+    AppBarMessage1(abmNew);
+
+    // Update AppBar internal state
+    UpdateBar;
+
+    // Save the initial size of the floating AppBar
+    PostMessage(Handle, WM_ENTERSIZEMOVE, 0, 0);
+    PostMessage(Handle, WM_EXITSIZEMOVE, 0, 0);
+
+    // Remove system menu
+    hMenu := GetSystemMenu(Handle, False);
+    DeleteMenu(hMenu, SC_RESTORE, MF_BYCOMMAND);
+    DeleteMenu(hMenu, SC_MINIMIZE, MF_BYCOMMAND);
+    DeleteMenu(hMenu, SC_MAXIMIZE, MF_BYCOMMAND);
+  end;
+
 begin
   // Force the shell to update its list of AppBars and the workarea.
   // This is a precaution and is very useful when debugging.  If you create
@@ -1482,20 +1439,18 @@ begin
   // it should be.  When a new AppBar is created, calling this function
   // fixes the user's workarea.
   ResetSystemKnowledge;
-
-  InitStruct;
-  // Call base class
   inherited Create(Owner);
-
-  FABS.nMaxWidth := Self.Monitor.BoundsRect.Width;
-  FABS.nMaxHeight := Self.Monitor.BoundsRect.Height;
-  FABS.szMaxDockSize.cx := FABS.nMaxWidth div 2;
-  FABS.szMaxDockSize.cy := FABS.nMaxHeight div 2;
+  InitStruct;
+  InitAppbar;
 end;
 
 // TAppBar.Destroy ////////////////////////////////////////////////////////////
 destructor TAppBar.Destroy;
 begin
+  FTimer.Free;
+  // Unregister our AppBar window with the Shell
+  SetEdge(abeUnknown);
+
   ResetSystemKnowledge;
 
   // Call base class
