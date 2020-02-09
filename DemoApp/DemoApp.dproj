@@ -108,13 +108,19 @@
         <DelphiCompile Include="$(MainSource)">
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
+        <DCCReference Include="..\AppBar.pas"/>
         <DCCReference Include="Demo.pas">
             <Form>DemoBar</Form>
+            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="DemoProp.pas">
             <Form>PropDlg</Form>
+            <FormType>dfm</FormType>
         </DCCReference>
-        <DCCReference Include="..\AppBar.pas"/>
+        <DCCReference Include="Unit1.pas">
+            <Form>AppBarX</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

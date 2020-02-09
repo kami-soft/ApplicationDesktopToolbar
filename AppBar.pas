@@ -15,20 +15,17 @@ unit AppBar;
 interface
 
 uses
-  Windows,
-  Messages,
-  SysUtils,
-  Classes,
-  Forms,
-  Dialogs,
-  Controls,
-  ExtCtrls,
-  ShellApi;
+  WinAPI.Windows,
+  WinAPI.Messages,
+  System.SysUtils,
+  System.Classes,
+  VCL.Forms,
+  VCL.Controls,
+  VCL.ExtCtrls;
 
 const
   // AppBar's user notification message
   WM_APPBARNOTIFY = WM_USER + 100;
-
   // Timer interval
   SLIDE_DEF_TIMER_INTERVAL = 400; // milliseconds
 
@@ -109,7 +106,6 @@ type
   // The record below contains all of the AppBar settings that
   // can be saved/loaded in/from the Registry
   TAppBarSettings = record
-    cbSize: DWORD; // Size of this structure
     abEdge: TAppBarEdge; // ABE_UNKNOWN, ABE_FLOAT, or ABE_edge
     abFlags: TAppBarFlags; // ABF_* flags
     bAutohide: Boolean; // Should AppBar be auto-hidden when docked?
@@ -130,7 +126,7 @@ type
 
   // TAppBar class ////////////////////////////////////////////////////////////
   TAppBar = class(TForm)
-  private
+  strict private
     { Internal implementation state variables }
     // This AppBar's settings info
     FABS: TAppBarSettings;
@@ -159,6 +155,18 @@ type
     function AppBarMessage2(abMessage: TAppBarMessage; abEdge: TAppBarEdge): UINT;
     function AppBarMessage3(abMessage: TAppBarMessage; abEdge: TAppBarEdge; lParam: lParam): UINT;
     function AppBarMessage4(abMessage: TAppBarMessage; abEdge: TAppBarEdge; lParam: lParam; var rc: TRect): UINT;
+
+    // Called when the AppBar receives a WM_APPBARNOTIFY window message
+    procedure AppBarCallbackMsg(var Msg: TMessage); message WM_APPBARNOTIFY;
+    procedure WMWindowPosChanged(var Msg: TWMWindowPosChanged); message WM_WINDOWPOSCHANGED;
+    procedure WMActivate(var Msg: TWMActivate); message WM_ACTIVATE;
+    procedure WMNcMouseMove(var Msg: TWMNCMouseMove); message WM_NCMOUSEMOVE;
+    procedure WMNCHitTest(var Msg: TWMNCHitTest); message WM_NCHITTEST;
+    procedure WMEnterSizeMove(var Msg: TMessage); message WM_ENTERSIZEMOVE;
+    procedure WMExitSizeMove(var Msg: TMessage); message WM_EXITSIZEMOVE;
+    procedure WMMoving(var Msg: TMessage); message WM_MOVING;
+    procedure WMSizing(var Msg: TMessage); message WM_SIZING;
+    procedure WMGetMinMaxInfo(var Msg: TWMGetMinMaxInfo); message WM_GETMINMAXINFO;
 
     // Gets a edge (ABE_FLOAT or ABE_edge) from a point (screen coordinates)
     function CalcProposedState(var pt: TSmallPoint): TAppBarEdge;
@@ -190,49 +198,18 @@ type
     procedure CreateParams(var Params: TCreateParams); override;
     { Overridable functions }
     // Called when the AppBar's proposed state changes
-    procedure OnAppBarStateChange(bProposed: Boolean; abEdgeProposed: TAppBarEdge); virtual;
+    procedure AppBarStateChange(bProposed: Boolean; abEdgeProposed: TAppBarEdge); virtual;
     // Called if user attempts to dock an Autohide AppBar on
     // an edge that already contains an Autohide AppBar
-    procedure OnAppBarForcedToDocked; virtual;
+    procedure AppBarForcedToDocked; virtual;
     // Called when AppBar gets an ABN_FULLSCREENAPP notification
-    procedure OnABNFullScreenApp(bOpen: Boolean); virtual;
+    procedure ABNFullScreenApp(bOpen: Boolean); virtual;
     // Called when AppBar gets an ABN_POSCHANGED notification
-    procedure OnABNPosChanged; virtual;
+    procedure ABNPosChanged; virtual;
     // Called when AppBar gets an ABN_WINDOWARRANGE notification
-    procedure OnABNWindowArrange(bBeginning: Boolean); virtual;
-
-    { Message handlers }
-    // Called when the AppBar receives a WM_APPBARNOTIFY window message
-    procedure OnAppBarCallbackMsg(var Msg: TMessage); message WM_APPBARNOTIFY;
-    // Called when the AppBar receives a WM_WINDOWPOSCHANGED message
-    procedure OnWindowPosChanged(var Msg: TWMWindowPosChanged); message WM_WINDOWPOSCHANGED;
-
-    // Called when the AppBar receives a WM_ACTIVATE message
-    procedure OnActivate(var Msg: TWMActivate); message WM_ACTIVATE;
-
-    // Called when the AppBar receives a WM_NCMOUSEMOVE message
-    procedure OnNcMouseMove(var Msg: TWMNCMouseMove); message WM_NCMOUSEMOVE;
-
-    // Called when the AppBar receives a WM_NCHITTEST message
-    procedure OnNcHitTest(var Msg: TWMNCHitTest); message WM_NCHITTEST;
-
-    // Called when the AppBar receives a WM_ENTERSIZEMOVE message
-    procedure OnEnterSizeMove(var Msg: TMessage); message WM_ENTERSIZEMOVE;
-
-    // Called when the AppBar receives a WM_EXITSIZEMOVE message
-    procedure OnExitSizeMove(var Msg: TMessage); message WM_EXITSIZEMOVE;
-
-    // Called when the AppBar receives a WM_MOVING message
-    procedure OnMoving(var Msg: TMessage); message WM_MOVING;
-
-    // Called when the AppBar receives a WM_SIZING message
-    procedure OnSizing(var Msg: TMessage); message WM_SIZING;
-
-    // Called when the AppBar receives a WM_GETMINMAXINFO message
-    procedure OnGetMinMaxInfo(var Msg: TWMGetMinMaxInfo); message WM_GETMINMAXINFO;
+    procedure ABNWindowArrange(bBeginning: Boolean); virtual;
 
     { AppBar-specific helper functions }
-
     function IsEdgeLeftOrRight(abEdge: TAppBarEdge): Boolean;
     function IsEdgeTopOrBottom(abEdge: TAppBarEdge): Boolean;
     function IsFloating(abEdge: TAppBarEdge): Boolean;
@@ -246,65 +223,48 @@ type
     // point specified in screen coordinates
     function GetEdgeFromPoint(abFlags: TAppBarFlags; pt: TSmallPoint): TAppBarEdge;
   public
-    // Constructs an AppBar
     constructor Create(Owner: TComponent); override;
-
-    // Destroys a previously created AppBar
     destructor Destroy; override;
-
-    // Forces the AppBar's visual appearance to match its internal state
     procedure UpdateBar; virtual;
   published
     // Allowed dockable edges
     property Flags: TAppBarFlags read FABS.abFlags write FABS.abFlags;
-
     // Horizontal size increment
     property HorzSizeInc: Integer read FABS.szSizeInc.cx write FABS.szSizeInc.cx;
     // Vertical size increment
     property VertSizeInc: Integer read FABS.szSizeInc.cy write FABS.szSizeInc.cy;
     // Edge to dock on
     property Edge: TAppBarEdge read GetEdge write SetEdge;
-
     // Auto-hide On/Off
     property AutoHide: Boolean read FABS.bAutohide write FABS.bAutohide;
-
     // Always On Top On/Off
     property AlwaysOnTop: Boolean read FABS.bAlwaysOnTop write FABS.bAlwaysOnTop;
     // Slide Effect On/Off
     property SlideEffect: Boolean read FABS.bSlideEffect write FABS.bSlideEffect;
     // Slide Time
     property SlideTime: Cardinal read FABS.nTimerInterval write SetSlideTime;
-
     // Horizontal size when docked on left or right
     property HorzDockSize: Integer read FABS.szDockSize.cy write FABS.szDockSize.cy;
-
     // Vertical size when docked on top or bottom
     property VertDockSize: Integer read FABS.szDockSize.cx write FABS.szDockSize.cx;
-
     // AppBar coordinates when floating
     property FloatLeft: Integer read FABS.rcFloat.Left write FABS.rcFloat.Left;
     property FloatTop: Integer read FABS.rcFloat.Top write FABS.rcFloat.Top;
     property FloatRight: Integer read FABS.rcFloat.Right write FABS.rcFloat.Right;
     property FloatBottom: Integer read FABS.rcFloat.Bottom write FABS.rcFloat.Bottom;
-
     // AppBar MinMax dimensions when floating
     property MinWidth: Integer read FABS.nMinWidth write FABS.nMinWidth;
     property MinHeight: Integer read FABS.nMinHeight write FABS.nMinHeight;
     property MaxWidth: Integer read FABS.nMaxWidth write FABS.nMaxWidth;
     property MaxHeight: Integer read FABS.nMaxHeight write FABS.nMaxHeight;
-
     // Min Height when docked horizontally
     property MinHorzDockSize: Integer read FABS.szMinDockSize.cy write FABS.szMinDockSize.cy;
-
     // Min Width when docked vertically
     property MinVertDockSize: Integer read FABS.szMinDockSize.cx write FABS.szMinDockSize.cx;
-
     // Max Height when docked horizontally
     property MaxHorzDockSize: Integer read FABS.szMaxDockSize.cy write FABS.szMaxDockSize.cy;
-
     // Max Width when docked vertically
     property MaxVertDockSize: Integer read FABS.szMaxDockSize.cx write FABS.szMaxDockSize.cx;
-
     // AppBar behavior in the Window Taskbar
     property TaskEntry: TAppBarTaskEntry read FABS.abTaskEntry write FABS.abTaskEntry;
   end;
@@ -313,7 +273,8 @@ implementation
 
 uses
   System.Types,
-  System.UITypes;
+  System.UITypes,
+  WinAPI.ShellApi;
 
 { Internal implementation functions }
 
@@ -507,7 +468,7 @@ begin
           w := rcStart.Width - (rcStart.Width - rcEnd.Width) * Integer(dwTime - dwTimeStart) div Integer(FABS.nTimerInterval);
           h := rcStart.Height - (rcStart.Height - rcEnd.Height) * Integer(dwTime - dwTimeStart) div Integer(FABS.nTimerInterval);
           // Show the window at its changed position
-          SetWindowPos(Handle, 0, x, y, w, h, SWP_NOZORDER or SWP_NOACTIVATE {or SWP_DRAWFRAME});
+          SetWindowPos(Handle, 0, x, y, w, h, SWP_NOZORDER or SWP_NOACTIVATE or SWP_DRAWFRAME);
           UpdateWindow(Handle);
           dwTime := GetTickCount;
         end;
@@ -576,7 +537,7 @@ var
   abCurrentEdge: TAppBarEdge;
   currentRect: TRect;
   rc: TRect;
-  hWnd: THandle;
+  WndPos: Cardinal;
 begin
   // If the AppBar is registered as auto-hide, unregister it
   abCurrentEdge := GetAutohideEdge;
@@ -603,7 +564,7 @@ begin
         // so that the workspace is not affected by the AppBar
         currentRect := Rect(0, 0, 0, 0);
         AppBarMessage4(abmSetPos, abEdge, lParam(False), currentRect);
-        SetBounds(FABS.rcFloat.Left, FABS.rcFloat.Top, FABS.rcFloat.Width, FABS.rcFloat.Height);
+        BoundsRect:=FABS.rcFloat;
       end;
   else
     begin
@@ -613,7 +574,7 @@ begin
           FABS.bAutohide := False;
           // Call a virtual function to let derived classes know that the AppBar
           // changed from auto-hide to docked
-          OnAppBarForcedToDocked;
+          AppBarForcedToDocked;
         end;
 
       GetRect(GetEdge, rc);
@@ -634,22 +595,22 @@ begin
   end;
 
   // Set the AppBar's z-order appropriately
-  hWnd := HWND_NOTOPMOST; // Assume normal Z-Order
+  WndPos := HWND_NOTOPMOST; // Assume normal Z-Order
   if FABS.bAlwaysOnTop then
     begin
       // If we are supposed to be always-on-top, put us there
-      hWnd := HWND_TOPMOST;
+      WndPos := HWND_TOPMOST;
       if FbFullScreenAppOpen then
         // But, if a full-screen window is opened, put ourself at the bottom
         // of the z-order so that we don't cover the full-screen window
-        hWnd := HWND_BOTTOM;
+        WndPos := HWND_BOTTOM;
     end;
-  SetWindowPos(Handle, hWnd, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE{ or SWP_DRAWFRAME});
+  SetWindowPos(Handle, WndPos, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE or SWP_DRAWFRAME);
   // Make sure that any auto-hide appbars stay on top of us after we move
   // even though our activation state has not changed
   AppBarMessage1(abmActivate);
   // Tell our derived class that there is a state change
-  OnAppBarStateChange(False, abEdge);
+  AppBarStateChange(False, abEdge);
 end;
 
 procedure TAppBar.SetSlideTime(nInterval: Cardinal);
@@ -660,7 +621,7 @@ end;
 
 { Overridable functions }
 
-procedure TAppBar.OnAppBarStateChange(bProposed: Boolean; abEdgeProposed: TAppBarEdge);
+procedure TAppBar.AppBarStateChange(bProposed: Boolean; abEdgeProposed: TAppBarEdge);
 var
   bFullDragOn: LongBool;
 begin
@@ -668,27 +629,24 @@ begin
   SystemParametersInfo(SPI_GETDRAGFULLWINDOWS, 0, @bFullDragOn, 0);
 
   // If FullDrag is turned on OR the appbar has changed position
-  if bFullDragOn or not bProposed then
+  if (bFullDragOn or not bProposed) and (abEdgeProposed<>FABS.abEdge) then
     begin
       if abEdgeProposed = abeFloat then
         // Show the window adornments
-        ModifyStyle(Handle, GWL_STYLE, 0, 0{WS_CAPTION or WS_SYSMENU}, 0{SWP_DRAWFRAME})
+        ModifyStyle(Handle, GWL_STYLE, 0, 0{WS_CAPTION or WS_SYSMENU}, SWP_DRAWFRAME)
       else
         // Hide the window adornments
-        ModifyStyle(Handle, GWL_STYLE, 0{WS_CAPTION or WS_SYSMENU}, 0, 0{SWP_DRAWFRAME});
+        ModifyStyle(Handle, GWL_STYLE, 0{WS_CAPTION or WS_SYSMENU}, 0, SWP_DRAWFRAME);
     end;
 end;
 
-procedure TAppBar.OnAppBarForcedToDocked;
-const
-  CRLF = #10#13;
+procedure TAppBar.AppBarForcedToDocked;
 begin
-  // Display the application name as the message box caption text.
-  MessageDlg('There is already an auto hidden window on this edge.' + CRLF + //
-    'Only one auto hidden window is allowed on each edge.', mtInformation, [mbOk], 0);
+  raise EOperationCancelled.Create('There is already an auto hidden window on this edge.'#13#10 + //
+    'Only one auto hidden window is allowed on each edge.');
 end;
 
-procedure TAppBar.OnABNFullScreenApp(bOpen: Boolean);
+procedure TAppBar.ABNFullScreenApp(bOpen: Boolean);
 begin
   // This function is called when a FullScreen window is openning or
   // closing. A FullScreen window is a top-level window that has its caption
@@ -705,7 +663,7 @@ begin
   UpdateBar;
 end;
 
-procedure TAppBar.OnABNPosChanged;
+procedure TAppBar.ABNPosChanged;
 begin
   // The TaskBar or another AppBar has changed its size or position
   if (GetEdge <> abeFloat) and (not FABS.bAutohide) then
@@ -714,26 +672,26 @@ begin
     UpdateBar;
 end;
 
-procedure TAppBar.OnABNWindowArrange(bBeginning: Boolean);
+procedure TAppBar.ABNWindowArrange(bBeginning: Boolean);
 begin
   // This function intentionally left blank
 end;
 
 { Message handlers }
 
-procedure TAppBar.OnAppBarCallbackMsg(var Msg: TMessage);
+procedure TAppBar.AppBarCallbackMsg(var Msg: TMessage);
 begin
   case Msg.WParam of
     ABN_FULLSCREENAPP:
-      OnABNFullScreenApp(Msg.lParam <> 0);
+      ABNFullScreenApp(Msg.lParam <> 0);
     ABN_POSCHANGED:
-      OnABNPosChanged;
+      ABNPosChanged;
     ABN_WINDOWARRANGE:
-      OnABNWindowArrange(Msg.lParam <> 0);
+      ABNWindowArrange(Msg.lParam <> 0);
   end;
 end;
 
-procedure TAppBar.OnWindowPosChanged(var Msg: TWMWindowPosChanged);
+procedure TAppBar.WMWindowPosChanged(var Msg: TWMWindowPosChanged);
 begin
   inherited;
   // When our window changes position, tell the Shell so that any
@@ -742,7 +700,7 @@ begin
   AppBarMessage1(abmWindowPosChanged);
 end;
 
-procedure TAppBar.OnActivate(var Msg: TWMActivate);
+procedure TAppBar.WMActivate(var Msg: TWMActivate);
 begin
   inherited;
   if Msg.Active = WA_INACTIVE then
@@ -779,7 +737,7 @@ begin
   inherited;
 end;
 
-procedure TAppBar.OnNcMouseMove(var Msg: TWMNCMouseMove);
+procedure TAppBar.WMNcMouseMove(var Msg: TWMNCMouseMove);
 begin
   // If we are a docked, auto-hidden AppBar, shown us
   // when the user moves over our non-client area
@@ -787,7 +745,7 @@ begin
   inherited;
 end;
 
-procedure TAppBar.OnNcHitTest(var Msg: TWMNCHitTest);
+procedure TAppBar.WMNCHitTest(var Msg: TWMNCHitTest);
 var
   bPrimaryMouseBtnDown: Boolean;
   rcClient: TRect;
@@ -797,6 +755,13 @@ begin
   // Find out what the system thinks is the hit test code
   inherited;
 
+  pt.x := Msg.XPos;
+  pt.y := Msg.YPos;
+  pt := ScreenToClient(pt);
+
+  if Assigned(ControlAtPos(pt, False)) then
+    Exit;
+
   // NOTE: If the user presses the secondary mouse button, pretend that the
   // user clicked on the client area so that we get WM_CONTEXTMENU messages
   if GetSystemMetrics(SM_SWAPBUTTON) <> 0 then
@@ -804,13 +769,6 @@ begin
   else
     vKey := VK_LBUTTON;
   bPrimaryMouseBtnDown := ((GetAsyncKeyState(vKey) and $8000) <> 0);
-
-  pt.x := Msg.XPos;
-  pt.y := Msg.YPos;
-  pt := ScreenToClient(pt);
-
-  if Assigned(ControlAtPos(pt, False)) then
-    Exit;
 
   rcClient := ClientRect;
   if (Msg.Result = HTCLIENT) and bPrimaryMouseBtnDown then
@@ -821,10 +779,10 @@ begin
   // If the AppBar is floating and the hittest code is a resize code...
   if GetEdge = abeFloat then
     begin
-      if (pt.x <= 10) then
+      if (pt.x <= 4) then
         Msg.Result := HTLEFT
       else
-      if ((rcClient.Width - 10) <= pt.x) then
+      if ((rcClient.Width - 4) <= pt.x) then
         Msg.Result := HTRIGHT
       else
         if Msg.Result <> HTCAPTION  then
@@ -848,6 +806,9 @@ begin
         begin
           // Resizing IS allowed for the edge that the AppBar is docked on
           // Get the location of the appbar's client area in screen coordinates
+          if (Msg.Result >=HTSIZEFIRST) and (Msg.Result<=HTSIZELAST) then
+            MSg.Result:=HTBORDER;
+
           case GetEdge of
             abeLeft:
               if pt.X > (rcClient.Right - 4) then
@@ -866,13 +827,13 @@ begin
     end;
 end;
 
-procedure TAppBar.OnEnterSizeMove(var Msg: TMessage);
+procedure TAppBar.WMEnterSizeMove(var Msg: TMessage);
 begin
   // The user started moving/resizing the AppBar, save its current state
   FabEdgeProposedPrev := GetEdge;
 end;
 
-procedure TAppBar.OnExitSizeMove(var Msg: TMessage);
+procedure TAppBar.WMExitSizeMove(var Msg: TMessage);
 var
   abEdgeProposedPrev: TAppBarEdge;
   rc, rcWorkArea: TRect;
@@ -930,7 +891,7 @@ begin
   SetEdge(abEdgeProposedPrev);
 end;
 
-procedure TAppBar.OnMoving(var Msg: TMessage);
+procedure TAppBar.WMMoving(var Msg: TMessage);
 var
   prc: PRect;
   pt: TSmallPoint;
@@ -963,10 +924,10 @@ begin
   GetRect(abEdgeProposed, prc^);
 
   // Tell our derived class that there is a proposed state change
-  OnAppBarStateChange(True, abEdgeProposed);
+  AppBarStateChange(True, abEdgeProposed);
 end;
 
-procedure TAppBar.OnSizing(var Msg: TMessage);
+procedure TAppBar.WMSizing(var Msg: TMessage);
 var
   prc: PRect;
   rcBorder: TRect;
@@ -1033,7 +994,7 @@ begin
   end;
 end;
 
-procedure TAppBar.OnGetMinMaxInfo(var Msg: TWMGetMinMaxInfo);
+procedure TAppBar.WMGetMinMaxInfo(var Msg: TWMGetMinMaxInfo);
 begin
   if GetEdge = abeFloat then
     with Msg.MinMaxInfo^ do
@@ -1196,7 +1157,6 @@ constructor TAppBar.Create(Owner: TComponent);
   procedure InitStruct;
   begin
     // Set default state of AppBar to float with no width & height
-    FABS.cbSize := sizeof(TAppBarSettings);
     FABS.abEdge := abeFloat;
     FABS.abFlags := [abfAllowLeft .. abfAllowFloat];
     FABS.bAutohide := False;
