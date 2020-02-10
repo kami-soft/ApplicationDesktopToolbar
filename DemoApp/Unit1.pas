@@ -337,8 +337,8 @@ procedure TAppBarX.SlideWindow(var rcEnd: TRect);
 var
   bFullDragOn: LongBool;
   rcStart: TRect;
-  dwTimeStart, dwTimeEnd, dwTime: DWORD;
-  x, y, w, h: Integer;
+  dwTimeStart, dwTimeEnd, dwTime, dwTimeDiff: DWORD;
+  tmpRect: TRect;
 begin
   // Only slide the window if the user has FullDrag turned on
   SystemParametersInfo(SPI_GETDRAGFULLWINDOWS, 0, @bFullDragOn, 0);
@@ -354,12 +354,13 @@ begin
       while (dwTime < dwTimeEnd) do
         begin
           // While we are still sliding, calculate our new position
-          x := rcStart.Left - (rcStart.Left - rcEnd.Left) * Integer(dwTime - dwTimeStart) div SLIDE_DEF_TIMER_INTERVAL;
-          y := rcStart.Top - (rcStart.Top - rcEnd.Top) * Integer(dwTime - dwTimeStart) div SLIDE_DEF_TIMER_INTERVAL;
-          w := rcStart.Width - (rcStart.Width - rcEnd.Width) * Integer(dwTime - dwTimeStart) div SLIDE_DEF_TIMER_INTERVAL;
-          h := rcStart.Height - (rcStart.Height - rcEnd.Height) * Integer(dwTime - dwTimeStart) div SLIDE_DEF_TIMER_INTERVAL;
+          dwTimeDiff := dwTime - dwTimeStart;
+          tmpRect.Left := rcStart.Left - (rcStart.Left - rcEnd.Left) * integer(dwTimeDiff) div SLIDE_DEF_TIMER_INTERVAL;
+          tmpRect.Top := rcStart.Top - (rcStart.Top - rcEnd.Top) * integer(dwTimeDiff) div SLIDE_DEF_TIMER_INTERVAL;
+          tmpRect.Width := rcStart.Width - (rcStart.Width - rcEnd.Width) * integer(dwTimeDiff) div SLIDE_DEF_TIMER_INTERVAL;
+          tmpRect.Height := rcStart.Height - (rcStart.Height - rcEnd.Height) * integer(dwTimeDiff) div SLIDE_DEF_TIMER_INTERVAL;
           // Show the window at its changed position
-          SetWindowPos(Handle, 0, x, y, w, h, SWP_NOZORDER or SWP_NOACTIVATE or SWP_DRAWFRAME);
+          SetWindowPos(Handle, 0, tmpRect.Left, tmpRect.Top, tmpRect.Width, tmpRect.Height, SWP_NOZORDER or SWP_NOACTIVATE or SWP_DRAWFRAME);
           UpdateWindow(Handle);
           dwTime := GetTickCount;
         end;
