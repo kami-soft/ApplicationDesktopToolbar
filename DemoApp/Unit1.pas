@@ -19,15 +19,18 @@ const
   WM_APPBARNOTIFY = WM_USER + 100;
 
 type
-  TAppBarMessage = (abmNew, abmRemove, abmQueryPos, abmSetPos, abmGetState, abmGetTaskBarPos, abmActivate, abmGetAutoHideBar, abmSetAutoHideBar, abmWindowPosChanged, abmSetState, abmGetAutoHideBarEx, abmSetAutoHideBarEx);
+  TAppBarMessage = (abmNew, abmRemove, abmQueryPos, abmSetPos, abmGetState, abmGetTaskBarPos, abmActivate, abmGetAutoHideBar, abmSetAutoHideBar, abmWindowPosChanged, abmSetState,
+    abmGetAutoHideBarEx, abmSetAutoHideBarEx);
   TAppBarEdge = (abeLeft, abeTop, abeRight, abeBottom, abeUnknown, abeFloat);
   TAppBarFlag = (abfAllowLeft, abfAllowTop, abfAllowRight, abfAllowBottom, abfAllowFloat);
   TAppBarFlags = set of TAppBarFlag;
 
   TAppBarX = class(TForm)
     btn1: TButton;
+    chkAutoHide: TCheckBox;
     procedure FormDestroy(Sender: TObject);
     procedure btn1Click(Sender: TObject);
+    procedure chkAutoHideClick(Sender: TObject);
   private
     FEdge: TAppBarEdge;
     FAppbarCreated: Boolean;
@@ -35,7 +38,9 @@ type
 
     FAppbarWidth: integer;
     FAppbarHeight: integer;
+    FAutohide: Boolean;
     procedure SetEdge(const Value: TAppBarEdge);
+    procedure SetAutohide(const Value: Boolean);
     { Private declarations }
     procedure WMActivate(var Msg: TMessage); message WM_ACTIVATE;
     procedure WMWindowPosChanged(var Msg: TMessage); message WM_WINDOWPOSCHANGED;
@@ -59,6 +64,7 @@ type
     { Public declarations }
     constructor Create(AOwner: TComponent); override;
     property Edge: TAppBarEdge read FEdge write SetEdge;
+    property Autohide: Boolean read FAutohide write SetAutohide;
 
     property AppbarWidth: integer read FAppbarWidth write FAppbarWidth;
     property AppbarHeight: integer read FAppbarHeight write FAppbarHeight;
@@ -122,6 +128,11 @@ begin
   FEdge := abeFloat;
   FAppbarWidth := 120;
   FAppbarHeight := 120;
+end;
+
+procedure TAppBarX.chkAutoHideClick(Sender: TObject);
+begin
+  Autohide := chkAutoHide.Checked;
 end;
 
 procedure TAppBarX.FormDestroy(Sender: TObject);
@@ -255,8 +266,41 @@ var
   rc: TRect;
 begin
   rc := GetAppbarRect(FEdge);
-  AppBarMessage(abmSetPos, FEdge, 0, rc);
-  BoundsRect := rc;
+  if AppBarMessage(abmSetAutoHideBarEx, FEdge, lParam(BOOL(FAutohide)), rc) = 0 then
+    FAutohide := False;
+
+  if not FAutohide then
+    begin
+      rc := GetAppbarRect(FEdge);
+      AppBarMessage(abmSetPos, FEdge, 0, rc);
+      BoundsRect := rc;
+    end
+  else
+    begin
+      rc := Self.Monitor.BoundsRect;
+      case FEdge of
+        abeLeft:
+          rc.Width := 2 * GetSystemMetrics(SM_CXBORDER);
+        abeTop:
+          rc.Height := 2 * GetSystemMetrics(SM_CYBORDER);
+        abeRight:
+          rc.Left := rc.Right - 2 * GetSystemMetrics(SM_CXBORDER);
+        abeBottom:
+          rc.Top := rc.Bottom - 2 * GetSystemMetrics(SM_CYBORDER);
+      end;
+      AppBarMessage(abmSetPos, FEdge, 0, rc);
+      BoundsRect := rc;
+    end;
+end;
+
+procedure TAppBarX.SetAutohide(const Value: Boolean);
+begin
+  if FAutohide <> Value then
+    begin
+      FAutohide := Value;
+      if FEdge in [abeLeft .. abeBottom] then
+        SetAppbarPos;
+    end;
 end;
 
 procedure TAppBarX.SetEdge(const Value: TAppBarEdge);
@@ -271,9 +315,7 @@ begin
     abeUnknown:
       FreeAppbar;
     abeFloat:
-      begin
-        FreeAppbar;
-      end;
+      FreeAppbar;
   else
     begin
       CreateAppbar;

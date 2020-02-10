@@ -25,6 +25,14 @@ object AppBarX: TAppBarX
     Caption = 'btn1'
     TabOrder = 0
     OnClick = btn1Click
-    ExplicitWidth = 194
+  end
+  object chkAutoHide: TCheckBox
+    Left = 24
+    Top = 48
+    Width = 97
+    Height = 17
+    Caption = 'chkAutoHide'
+    TabOrder = 1
+    OnClick = chkAutoHideClick
   end
 end
