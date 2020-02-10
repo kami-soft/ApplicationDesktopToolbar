@@ -17,6 +17,7 @@ uses
 const
   // AppBar's user notification message
   WM_APPBARNOTIFY = WM_USER + 100;
+  SLIDE_DEF_TIMER_INTERVAL = 400;
 
 type
   TAppBarMessage = (abmNew, abmRemove, abmQueryPos, abmSetPos, abmGetState, abmGetTaskBarPos, abmActivate, abmGetAutoHideBar, abmSetAutoHideBar, abmWindowPosChanged, abmSetState,
@@ -58,6 +59,8 @@ type
     procedure SetABNFullscreenApp(bFullscreen: Boolean);
 
     function GetAppbarRect(AEdge: TAppBarEdge): TRect;
+
+    procedure SlideWindow(var rcEnd: TRect);
   protected
     procedure CreateParams(var Params: TCreateParams); override;
   public
@@ -328,6 +331,43 @@ begin
     end;
   end;
 
+end;
+
+procedure TAppBarX.SlideWindow(var rcEnd: TRect);
+var
+  bFullDragOn: LongBool;
+  rcStart: TRect;
+  dwTimeStart, dwTimeEnd, dwTime: DWORD;
+  x, y, w, h: Integer;
+begin
+  // Only slide the window if the user has FullDrag turned on
+  SystemParametersInfo(SPI_GETDRAGFULLWINDOWS, 0, @bFullDragOn, 0);
+
+  // Get the current window position
+  GetWindowRect(Handle, rcStart);
+  if bFullDragOn and ((rcStart.Left <> rcEnd.Left) or (rcStart.Top <> rcEnd.Top) or (rcStart.Right <> rcEnd.Right) or (rcStart.Bottom <> rcEnd.Bottom)) then
+    begin
+      // Get our starting and ending time
+      dwTimeStart := GetTickCount;
+      dwTimeEnd := dwTimeStart + SLIDE_DEF_TIMER_INTERVAL;
+      dwTime := dwTimeStart;
+      while (dwTime < dwTimeEnd) do
+        begin
+          // While we are still sliding, calculate our new position
+          x := rcStart.Left - (rcStart.Left - rcEnd.Left) * Integer(dwTime - dwTimeStart) div SLIDE_DEF_TIMER_INTERVAL;
+          y := rcStart.Top - (rcStart.Top - rcEnd.Top) * Integer(dwTime - dwTimeStart) div SLIDE_DEF_TIMER_INTERVAL;
+          w := rcStart.Width - (rcStart.Width - rcEnd.Width) * Integer(dwTime - dwTimeStart) div SLIDE_DEF_TIMER_INTERVAL;
+          h := rcStart.Height - (rcStart.Height - rcEnd.Height) * Integer(dwTime - dwTimeStart) div SLIDE_DEF_TIMER_INTERVAL;
+          // Show the window at its changed position
+          SetWindowPos(Handle, 0, x, y, w, h, SWP_NOZORDER or SWP_NOACTIVATE or SWP_DRAWFRAME);
+          UpdateWindow(Handle);
+          dwTime := GetTickCount;
+        end;
+    end;
+
+  // Make sure that the window is at its final position
+  BoundsRect := rcEnd;
+  UpdateWindow(Handle);
 end;
 
 procedure TAppBarX.WMActivate(var Msg: TMessage);
