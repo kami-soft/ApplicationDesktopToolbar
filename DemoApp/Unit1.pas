@@ -70,6 +70,7 @@ var
 implementation
 
 uses
+  System.Types,
   Winapi.ShellAPI;
 
 {$R *.dfm}

@@ -17,8 +17,8 @@ uses
 begin
   Application.Initialize;
   Application.MainFormOnTaskBar:=True;
-  Application.CreateForm(TDemoBar, DemoBar);
   Application.CreateForm(TAppBarX, AppBarX);
+  Application.CreateForm(TDemoBar, DemoBar);
   Application.CreateForm(TPropDlg, PropDlg);
   Application.Run;
 end.

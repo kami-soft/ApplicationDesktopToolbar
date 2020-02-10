@@ -60,7 +60,7 @@ type
   // ABM_WINDOWPOSCHANGED = $00000009;
 
   // The following enumerated type defines the constants in the table
-  TAppBarMessage = (abmNew, abmRemove, abmQueryPos, abmSetPos, abmGetState, abmGetTaskBarPos, abmActivate, abmGetAutoHideBar, abmSetAutoHideBar, abmWindowPosChanged);
+  TAppBarMessage = (abmNew, abmRemove, abmQueryPos, abmSetPos, abmGetState, abmGetTaskBarPos, abmActivate, abmGetAutoHideBar, abmSetAutoHideBar, abmWindowPosChanged, abmSetState, abmGetAutoHideBarEx, abmSetAutoHideBarEx);
 
   // An AppBar can be in one of 6 states shown in the table below:
   // State          Description
@@ -476,15 +476,18 @@ begin
 
   // Make sure that the window is at its final position
   BoundsRect := rcEnd;
+  UpdateWindow(Handle);
 end;
 
 function TAppBar.GetAutohideEdge: TAppBarEdge;
 var
   abe: TAppBarEdge;
+  rc: TRect;
 begin
   Result := abeUnknown;
+  rc:=Self.Monitor.BoundsRect;
   for abe := abeLeft to abeBottom do
-    if Handle = AppBarMessage2(abmGetAutoHideBar, abe) then
+    if Handle = AppBarMessage4(abmGetAutoHideBarEx, abe, 0, rc) then
       begin
         Result := abe;
         Break;
@@ -544,7 +547,10 @@ begin
 
   if abCurrentEdge <> abeUnknown then
     // Our AppBar is auto-hidden, unregister it
-    AppBarMessage3(abmSetAutoHideBar, abCurrentEdge, lParam(False));
+  begin
+    rc:=Self.Monitor.BoundsRect;
+    AppBarMessage4(abmSetAutoHideBarEx, abCurrentEdge, lParam(False), rc);
+  end;
 
   // Save the new requested state
   FABS.abEdge := abEdge;
@@ -568,7 +574,8 @@ begin
       end;
   else
     begin
-      if FABS.bAutohide and (AppBarMessage3(abmSetAutoHideBar, GetEdge, lParam(True)) = 0) then
+      rc:=Self.Monitor.BoundsRect;
+      if FABS.bAutohide and (AppBarMessage4(abmSetAutoHideBar, GetEdge, lParam(True), rc) = 0) then
         begin
           // We couldn't set the AppBar on a new edge, let's dock it instead
           FABS.bAutohide := False;
@@ -642,7 +649,7 @@ end;
 
 procedure TAppBar.AppBarForcedToDocked;
 begin
-  raise EOperationCancelled.Create('There is already an auto hidden window on this edge.'#13#10 + //
+  raise EExternal.Create('There is already an auto hidden window on this edge.'#13#10 + //
     'Only one auto hidden window is allowed on each edge.');
 end;
 
@@ -996,6 +1003,7 @@ end;
 
 procedure TAppBar.WMGetMinMaxInfo(var Msg: TWMGetMinMaxInfo);
 begin
+  inherited;
   if GetEdge = abeFloat then
     with Msg.MinMaxInfo^ do
       begin
@@ -1009,8 +1017,8 @@ begin
       begin
         ptMinTrackSize.x := FABS.szMinDockSize.cx;
         ptMinTrackSize.y := FABS.szMinDockSize.cy;
-        ptMaxTrackSize.x := Self.Monitor.BoundsRect.Right;
-        ptMaxTrackSize.y := Self.Monitor.BoundsRect.Bottom;
+        ptMaxTrackSize.x := Screen.Monitors[0].Width;
+        ptMaxTrackSize.y := Screen.Monitors[0].Height;
         if not IsEdgeTopOrBottom(GetEdge) then
           ptMaxTrackSize.x := FABS.szMaxDockSize.cx;
         if not IsEdgeLeftOrRight(GetEdge) then
