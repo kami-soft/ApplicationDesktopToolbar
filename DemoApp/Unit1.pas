@@ -39,17 +39,20 @@ type
 
     FAppbarWidth: integer;
     FAppbarHeight: integer;
+
     FAutohide: Boolean;
+
     procedure SetEdge(const Value: TAppBarEdge);
     procedure SetAutohide(const Value: Boolean);
     { Private declarations }
+    procedure WMHideTimer(var Msg: TMessage); message WM_TIMER;
     procedure WMActivate(var Msg: TMessage); message WM_ACTIVATE;
     procedure WMWindowPosChanged(var Msg: TMessage); message WM_WINDOWPOSCHANGED;
-    procedure WMNcHitTest(var Msg: TWMNCHitTest); message WM_NCHITTEST;
+    procedure WMNCHitTest(var Msg: TWMNCHitTest); message WM_NCHITTEST;
     procedure WMExitSizeMove(var Msg: TMessage); message WM_EXITSIZEMOVE;
+    procedure WMNCMouseMove(var Msg: TWMNCMouseMove); message WM_NCMOUSEMOVE;
 
     procedure AppBarCallbackMsg(var Msg: TMessage); message WM_APPBARNOTIFY;
-
     function AppBarMessage(abMessage: TAppBarMessage; abEdge: TAppBarEdge; lParam: lParam; var rc: TRect): UINT;
 
     procedure CreateAppbar;
@@ -57,9 +60,12 @@ type
     procedure SetAppbarPos;
     procedure SetABNStateChanged;
     procedure SetABNFullscreenApp(bFullscreen: Boolean);
+    procedure SetABNWindowsArrange(bStartArrange: Boolean);
 
-    function GetAppbarRect(AEdge: TAppBarEdge): TRect;
+    function GetVisibleAppbarRect(AEdge: TAppBarEdge): TRect;
+    function GetHiddenAppbarRect(AEdge: TAppBarEdge): TRect;
 
+    procedure ShowHiddenAppBar(bShow: Boolean);
     procedure SlideWindow(var rcEnd: TRect);
   protected
     procedure CreateParams(var Params: TCreateParams); override;
@@ -94,6 +100,8 @@ begin
       SetAppbarPos;
     ABN_FULLSCREENAPP:
       SetABNFullscreenApp(Msg.lParam <> 0);
+    ABN_WINDOWARRANGE:
+      SetABNWindowsArrange(Msg.lParam <> 0);
   end;
 end;
 
@@ -110,7 +118,6 @@ begin
   abd.lParam := lParam;
   Result := SHAppBarMessage(Ord(abMessage), abd);
 
-  // If the caller passed a rectangle, return the updated rectangle
   rc := abd.rc;
 end;
 
@@ -187,7 +194,22 @@ begin
     end;
 end;
 
-function TAppBarX.GetAppbarRect(AEdge: TAppBarEdge): TRect;
+function TAppBarX.GetHiddenAppbarRect(AEdge: TAppBarEdge): TRect;
+begin
+  Result := Self.Monitor.BoundsRect;
+  case AEdge of
+    abeLeft:
+      Result.Width := 2 * GetSystemMetrics(SM_CXBORDER);
+    abeTop:
+      Result.Height := 2 * GetSystemMetrics(SM_CYBORDER);
+    abeRight:
+      Result.Left := Result.Right - 2 * GetSystemMetrics(SM_CXBORDER);
+    abeBottom:
+      Result.Top := Result.Bottom - 2 * GetSystemMetrics(SM_CYBORDER);
+  end;
+end;
+
+function TAppBarX.GetVisibleAppbarRect(AEdge: TAppBarEdge): TRect;
 begin
   CreateAppbar;
   Result := Self.Monitor.BoundsRect;
@@ -230,70 +252,41 @@ begin
 end;
 
 procedure TAppBarX.SetABNFullscreenApp(bFullscreen: Boolean);
-var
-  ABNState: Cardinal;
-  rc: TRect;
-  c: Cardinal;
 begin
-  rc := BoundsRect;
-  ABNState := AppBarMessage(abmGetState, FEdge, 0, rc);
-  if (ABNState and ABS_ALWAYSONTOP) <> 0 then
-    c := HWND_TOPMOST
-  else
-    c := HWND_BOTTOM;
-
   if bFullscreen then
-    SetWindowPos(Handle, c, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE)
+    SetWindowPos(Handle, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE)
   else
-    if (ABNState and ABS_ALWAYSONTOP) <> 0 then
-      SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE);
+    SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE);
 end;
 
 procedure TAppBarX.SetABNStateChanged;
-var
-  ABNState: Cardinal;
-  rc: TRect;
-  c: Cardinal;
 begin
-  rc := BoundsRect;
-  ABNState := AppBarMessage(abmGetState, FEdge, 0, rc);
-  if (ABNState and ABS_ALWAYSONTOP) <> 0 then
-    c := HWND_TOPMOST
-  else
-    c := HWND_BOTTOM;
-  SetWindowPos(Handle, c, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE);
+  SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE);
+end;
+
+procedure TAppBarX.SetABNWindowsArrange(bStartArrange: Boolean);
+begin
+  Visible := not bStartArrange;
 end;
 
 procedure TAppBarX.SetAppbarPos;
 var
   rc: TRect;
+  c: Cardinal;
 begin
-  rc := GetAppbarRect(FEdge);
+  rc := GetVisibleAppbarRect(FEdge);
   if AppBarMessage(abmSetAutoHideBarEx, FEdge, lParam(BOOL(FAutohide)), rc) = 0 then
     FAutohide := False;
+  c := HWND_TOPMOST;
 
-  if not FAutohide then
-    begin
-      rc := GetAppbarRect(FEdge);
-      AppBarMessage(abmSetPos, FEdge, 0, rc);
-      BoundsRect := rc;
-    end
+  if FAutohide then
+    rc := GetHiddenAppbarRect(FEdge)
   else
-    begin
-      rc := Self.Monitor.BoundsRect;
-      case FEdge of
-        abeLeft:
-          rc.Width := 2 * GetSystemMetrics(SM_CXBORDER);
-        abeTop:
-          rc.Height := 2 * GetSystemMetrics(SM_CYBORDER);
-        abeRight:
-          rc.Left := rc.Right - 2 * GetSystemMetrics(SM_CXBORDER);
-        abeBottom:
-          rc.Top := rc.Bottom - 2 * GetSystemMetrics(SM_CYBORDER);
-      end;
-      AppBarMessage(abmSetPos, FEdge, 0, rc);
-      BoundsRect := rc;
-    end;
+    rc := GetVisibleAppbarRect(FEdge);
+
+  AppBarMessage(abmSetPos, FEdge, 0, rc);
+  BoundsRect := rc;
+  SetWindowPos(Handle, c, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE or SWP_DRAWFRAME);
 end;
 
 procedure TAppBarX.SetAutohide(const Value: Boolean);
@@ -333,6 +326,31 @@ begin
 
 end;
 
+procedure TAppBarX.ShowHiddenAppBar(bShow: Boolean);
+var
+  rc: TRect;
+  HiddenAppbarShowed: Boolean;
+begin
+  if FAutohide and (FEdge in [abeLeft .. abeBottom]) then
+    begin
+      HiddenAppbarShowed := (Width = AppbarWidth) or (Height = AppbarHeight);
+      if bShow <> HiddenAppbarShowed then
+        begin
+          if bShow then
+            begin
+              rc := GetVisibleAppbarRect(FEdge);
+              SetTimer(Handle, 0, SLIDE_DEF_TIMER_INTERVAL, nil);
+            end
+          else
+            begin
+              rc := GetHiddenAppbarRect(FEdge);
+              KillTimer(Handle, 0);
+            end;
+          SlideWindow(rc);
+        end;
+    end;
+end;
+
 procedure TAppBarX.SlideWindow(var rcEnd: TRect);
 var
   bFullDragOn: LongBool;
@@ -368,7 +386,6 @@ begin
 
   // Make sure that the window is at its final position
   BoundsRect := rcEnd;
-  UpdateWindow(Handle);
 end;
 
 procedure TAppBarX.WMActivate(var Msg: TMessage);
@@ -402,7 +419,16 @@ begin
     end;
 end;
 
-procedure TAppBarX.WMNcHitTest(var Msg: TWMNCHitTest);
+procedure TAppBarX.WMHideTimer(var Msg: TMessage);
+begin
+  if FAutohide and (FEdge in [abeLeft .. abeBottom]) then
+    begin
+      if (GetActiveWindow <> Handle) and not BoundsRect.Contains(Mouse.CursorPos) then
+        ShowHiddenAppBar(False);
+    end;
+end;
+
+procedure TAppBarX.WMNCHitTest(var Msg: TWMNCHitTest);
 const
   BorderDelta = 5;
 var
@@ -475,6 +501,11 @@ begin
             end;
       end;
   end;
+end;
+
+procedure TAppBarX.WMNCMouseMove(var Msg: TWMNCMouseMove);
+begin
+  ShowHiddenAppBar(True);
 end;
 
 procedure TAppBarX.WMWindowPosChanged(var Msg: TMessage);
