@@ -169,7 +169,7 @@ type
     procedure WMGetMinMaxInfo(var Msg: TWMGetMinMaxInfo); message WM_GETMINMAXINFO;
 
     // Gets a edge (ABE_FLOAT or ABE_edge) from a point (screen coordinates)
-    function CalcProposedState(var pt: TSmallPoint): TAppBarEdge;
+    function CalcProposedState(var pt: TPoint): TAppBarEdge;
     // Gets a retangle position (screen coordinates) from a proposed state
     procedure GetRect(abEdgeProposed: TAppBarEdge; var rcProposed: TRect);
     // Adjusts the AppBar's location to account for autohide
@@ -182,7 +182,7 @@ type
     // Returns which edge we're autohidden on or ABE_UNKNOWN
     function GetAutohideEdge: TAppBarEdge;
     // Returns a TSmallPoint that gives the cursor position in screen coords
-    function GetMessagePosition: TSmallPoint;
+    function GetMessagePosition: TPoint;
     // Changes the style of a window (translated from AfxModifyStyle)
     function ModifyStyle(hWnd: THandle; nStyleOffset: Integer; dwRemove: DWORD; dwAdd: DWORD; nFlags: UINT): Boolean;
 
@@ -221,7 +221,7 @@ type
 
     // Returns a proposed edge or ABE_FLOAT based on ABF_* flags and a
     // point specified in screen coordinates
-    function GetEdgeFromPoint(abFlags: TAppBarFlags; pt: TSmallPoint): TAppBarEdge;
+    function GetEdgeFromPoint(abFlags: TAppBarFlags; pt: TPoint): TAppBarEdge;
   public
     constructor Create(Owner: TComponent); override;
     destructor Destroy; override;
@@ -331,7 +331,7 @@ begin
   Result := AppBarMessage(abMessage, abEdge, lParam, rc);
 end;
 
-function TAppBar.CalcProposedState(var pt: TSmallPoint): TAppBarEdge;
+function TAppBar.CalcProposedState(var pt: TPoint): TAppBarEdge;
 var
   bForceFloat: Boolean;
 begin
@@ -494,13 +494,13 @@ begin
       end;
 end;
 
-function TAppBar.GetMessagePosition: TSmallPoint;
+function TAppBar.GetMessagePosition: TPoint;
 var
   dw: DWORD;
 begin
   dw := GetMessagePos;
-  Result.x := LongRec(dw).Lo;
-  Result.y := LongRec(dw).Hi;
+  Result.x := SmallInt(LongRec(dw).Lo);
+  Result.y := SmallInt(LongRec(dw).Hi);
 end;
 
 function TAppBar.ModifyStyle(hWnd: THandle; nStyleOffset: Integer; dwRemove: DWORD; dwAdd: DWORD; nFlags: UINT): Boolean;
@@ -722,7 +722,7 @@ end;
 
 procedure TAppBar.OnAppBarTimer(Sender: TObject);
 var
-  pt: TSmallPoint;
+  pt: TPoint;
   rc: TRect;
 begin
   if GetActiveWindow <> Handle then
@@ -734,7 +734,7 @@ begin
       GetWindowRect(Handle, rc);
       // Add a little margin around the AppBar
       InflateRect(rc, 2 * GetSystemMetrics(SM_CXDOUBLECLK), 2 * GetSystemMetrics(SM_CYDOUBLECLK));
-      if not PtInRect(rc, SmallPointToPoint(pt)) then
+      if not PtInRect(rc, pt) then
         // If the mouse is NOT over the AppBar, hide the AppBar
         begin
           ShowHiddenAppBar(False);
@@ -901,7 +901,7 @@ end;
 procedure TAppBar.WMMoving(var Msg: TMessage);
 var
   prc: PRect;
-  pt: TSmallPoint;
+  pt: TPoint;
   abEdgeProposed: TAppBarEdge;
 begin
   // We control the moving of the AppBar.  For example, if the mouse moves
@@ -1074,7 +1074,7 @@ begin
 end;
 {$ENDIF}
 
-function TAppBar.GetEdgeFromPoint(abFlags: TAppBarFlags; pt: TSmallPoint): TAppBarEdge;
+function TAppBar.GetEdgeFromPoint(abFlags: TAppBarFlags; pt: TPoint): TAppBarEdge;
 var
   rc: TRect;
   cxScreen: Integer;
@@ -1096,7 +1096,7 @@ begin
       InflateRect(rc, -GetSystemMetrics(SM_CXVSCROLL), -GetSystemMetrics(SM_CYHSCROLL));
 
       // If the point is in the adjusted workarea OR no edges are allowed
-      if PtInRect(rc, SmallPointToPoint(pt)) or not IsDockable(abFlags) then
+      if PtInRect(rc, pt) or not IsDockable(abFlags) then
         begin
           // The AppBar should float
           Result := abeFloat;
