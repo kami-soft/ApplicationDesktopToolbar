@@ -320,8 +320,9 @@ begin
     rc := GetVisibleAppbarRect(FEdge);
 
   AppBarMessage(abmSetPos, FEdge, 0, rc);
-  BoundsRect := rc;
   SetWindowPos(Handle, c, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE or SWP_DRAWFRAME);
+  SlideWindow(rc);
+  //SetWindowPos(Handle, c, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE or SWP_DRAWFRAME);
 end;
 
 procedure TAppBarX.SetAutohide(const Value: Boolean);
@@ -544,20 +545,21 @@ begin
 
   if abEdgeProposed = abeFloat then
     begin
-      if (FProposedEdge in [abeLeft..abeBottom]) and not FFloatRect.IsEmpty then
+      if (FProposedEdge <>abeFloat) and not FFloatRect.IsEmpty then
         begin
           prc^ := FFloatRect;
           prc.SetLocation(pt.X - prc.Width div 2, pt.Y);
         end
       else
-        FFloatRect := BoundsRect;
+        if FProposedEdge = abeFloat then
+          FFloatRect := BoundsRect;
     end
   else
     begin
       prc^ := GetVisibleAppbarRect(abEdgeProposed);
       //if FEdge = abeFloat then
-        if FProposedEdge = abeFloat then
-          FFloatRect := BoundsRect;
+      //  if FProposedEdge = abeFloat then
+      //    FFloatRect := BoundsRect;
     end;
   FProposedEdge := abEdgeProposed;
 end;
