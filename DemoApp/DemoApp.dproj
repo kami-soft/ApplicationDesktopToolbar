@@ -111,8 +111,8 @@
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
         <DCCReference Include="..\AppBar.pas"/>
-        <DCCReference Include="Unit1.pas">
-            <Form>AppBarX</Form>
+        <DCCReference Include="DemoForm.pas">
+            <Form>fmDemo</Form>
             <FormType>dfm</FormType>
         </DCCReference>
         <BuildConfiguration Include="Base">

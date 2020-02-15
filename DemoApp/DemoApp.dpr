@@ -8,13 +8,13 @@ uses
   madListModules,
   Forms,
   AppBar in '..\AppBar.pas',
-  Unit1 in 'Unit1.pas' {AppBarX};
+  DemoForm in 'DemoForm.pas' {fmDemo};
 
 {$R *.RES}
 
 begin
   Application.Initialize;
   Application.MainFormOnTaskBar:=True;
-  Application.CreateForm(TAppBarX, AppBarX);
+  Application.CreateForm(TfmDemo, fmDemo);
   Application.Run;
 end.
