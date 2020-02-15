@@ -528,7 +528,7 @@ begin
 
   if abEdgeProposed = abeFloat then
   begin
-    if (FProposedEdge in cAnyEdge) and not FFloatRect.IsEmpty then
+    if (FProposedEdge in cAnyEdge) or ((FProposedEdge = abeUnknown) and (FEdge in cAnyEdge)) then
     begin
       prc^ := FFloatRect;
       prc.SetLocation(pt.X - prc.Width div 2, pt.Y);
@@ -536,6 +536,7 @@ begin
     else
       if FProposedEdge = abeFloat then
         FFloatRect := BoundsRect;
+
   end
   else
   begin
