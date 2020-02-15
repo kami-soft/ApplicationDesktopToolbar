@@ -20,11 +20,9 @@ const
   SLIDE_DEF_TIMER_INTERVAL = 400;
 
 type
-  TAppBarMessage = (abmNew, abmRemove, abmQueryPos, abmSetPos, abmGetState, abmGetTaskBarPos, abmActivate, abmGetAutoHideBar, abmSetAutoHideBar, abmWindowPosChanged, abmSetState,
-    abmGetAutoHideBarEx, abmSetAutoHideBarEx);
+  TAppBarMessage = (abmNew, abmRemove, abmQueryPos, abmSetPos, abmGetState, abmGetTaskBarPos, abmActivate,
+    abmGetAutoHideBar, abmSetAutoHideBar, abmWindowPosChanged, abmSetState, abmGetAutoHideBarEx, abmSetAutoHideBarEx);
   TAppBarEdge = (abeLeft, abeTop, abeRight, abeBottom, abeUnknown, abeFloat);
-  TAppBarFlag = (abfAllowLeft, abfAllowTop, abfAllowRight, abfAllowBottom, abfAllowFloat);
-  TAppBarFlags = set of TAppBarFlag;
 
   TEdgeChangeEvent = procedure(Sender: TObject; ANewEdge: TAppBarEdge; var Allow: Boolean) of object;
 
@@ -100,8 +98,13 @@ uses
   System.Types,
   Winapi.ShellAPI;
 
-{$R *.dfm}
-{ TAppBarX }
+const
+  cAnyEdge = [abeLeft .. abeBottom];
+  cLeftRightEdge = [abeLeft, abeRight];
+  cTopBottomEdge = [abeTop, abeBottom];
+
+  {$R *.dfm}
+  { TAppBarX }
 
 function IsPointEqual(const p1, p2: TPoint): Boolean;
 begin
@@ -180,15 +183,15 @@ procedure TAppBarX.CreateAppbar;
 var
   rc: TRect;
 begin
-  if (not FAppbarCreated) and (FEdge in [abeLeft .. abeBottom]) then
-    begin
-      if FProposedEdge = abeUnknown then
-        FFloatRect := BoundsRect;
-      rc := TRect.Empty;
-      AppBarMessage(abmNew, FEdge, 0, rc);
-      FAppbarCreated := True;
-      FProposedEdge := abeUnknown;
-    end;
+  if (not FAppbarCreated) and (FEdge in cAnyEdge) then
+  begin
+    if FProposedEdge = abeUnknown then
+      FFloatRect := BoundsRect;
+    rc := TRect.Empty;
+    AppBarMessage(abmNew, FEdge, 0, rc);
+    FAppbarCreated := True;
+    FProposedEdge := abeUnknown;
+  end;
 end;
 
 procedure TAppBarX.CreateParams(var Params: TCreateParams);
@@ -219,19 +222,20 @@ var
   rc: TRect;
 begin
   if FAppbarCreated then
-    begin
-      rc := TRect.Empty;
-      AppBarMessage(abmRemove, abeUnknown, 0, rc);
-      FAppbarCreated := False;
+  begin
+    rc := TRect.Empty;
+    AppBarMessage(abmRemove, abeUnknown, 0, rc);
+    FAppbarCreated := False;
 
-      if not(csDestroying in ComponentState) then
-        BoundsRect := FFloatRect;
-    end;
+    if not(csDestroying in ComponentState) then
+      BoundsRect := FFloatRect;
+  end;
 end;
 
 function TAppBarX.GetHiddenAppbarRect(AEdge: TAppBarEdge): TRect;
 begin
   Result := Self.Monitor.BoundsRect;
+  AppBarMessage(abmQueryPos, AEdge, 0, Result);
   case AEdge of
     abeLeft:
       Result.Width := 2 * GetSystemMetrics(SM_CXBORDER);
@@ -248,28 +252,7 @@ function TAppBarX.GetVisibleAppbarRect(AEdge: TAppBarEdge): TRect;
 begin
   CreateAppbar;
   Result := Self.Monitor.BoundsRect;
-  case AEdge of
-    abeLeft:
-      Result.Width := AppbarWidth;
-    abeTop:
-      Result.Height := AppbarHeight;
-    abeRight:
-      begin
-        Result.SetLocation(Result.Right - AppbarWidth, Result.Top);
-        Result.Width := AppbarWidth;
-      end;
-    abeBottom:
-      begin
-        Result.SetLocation(Result.Left, Result.Bottom - AppbarHeight);
-        Result.Height := AppbarHeight;
-      end;
-    abeUnknown:
-      ;
-    abeFloat:
-      ;
-  end;
   AppBarMessage(abmQueryPos, AEdge, 0, Result);
-
   case AEdge of
     abeLeft:
       Result.Right := Result.Left + AppbarWidth;
@@ -279,9 +262,7 @@ begin
       Result.Left := Result.Right - AppbarWidth;
     abeBottom:
       Result.Top := Result.Bottom - AppbarHeight;
-    abeUnknown:
-      ;
-    abeFloat:
+    abeUnknown, abeFloat:
       ;
   end;
 end;
@@ -289,14 +270,14 @@ end;
 procedure TAppBarX.SetABNFullscreenApp(bFullscreen: Boolean);
 begin
   if bFullscreen then
-    SetWindowPos(Handle, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE)
+    SetWindowPos(Handle, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE or SWP_DRAWFRAME)
   else
-    SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE);
+    SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE or SWP_DRAWFRAME);
 end;
 
 procedure TAppBarX.SetABNStateChanged;
 begin
-  SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE);
+  SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE or SWP_DRAWFRAME);
 end;
 
 procedure TAppBarX.SetABNWindowsArrange(bStartArrange: Boolean);
@@ -307,12 +288,10 @@ end;
 procedure TAppBarX.SetAppbarPos;
 var
   rc: TRect;
-  c: Cardinal;
 begin
   rc := GetVisibleAppbarRect(FEdge);
   if AppBarMessage(abmSetAutoHideBarEx, FEdge, LPARAM(BOOL(FAutohide)), rc) = 0 then
     FAutohide := False;
-  c := HWND_TOPMOST;
 
   if FAutohide then
     rc := GetHiddenAppbarRect(FEdge)
@@ -320,19 +299,18 @@ begin
     rc := GetVisibleAppbarRect(FEdge);
 
   AppBarMessage(abmSetPos, FEdge, 0, rc);
-  SetWindowPos(Handle, c, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE or SWP_DRAWFRAME);
+  SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE or SWP_DRAWFRAME);
   SlideWindow(rc);
-  //SetWindowPos(Handle, c, 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE or SWP_DRAWFRAME);
 end;
 
 procedure TAppBarX.SetAutohide(const Value: Boolean);
 begin
   if FAutohide <> Value then
-    begin
-      FAutohide := Value;
-      if FEdge in [abeLeft .. abeBottom] then
-        SetAppbarPos;
-    end;
+  begin
+    FAutohide := Value;
+    if FEdge in cAnyEdge then
+      SetAppbarPos;
+  end;
 end;
 
 procedure TAppBarX.SetEdge(const Value: TAppBarEdge);
@@ -355,7 +333,7 @@ begin
       CreateAppbar;
       SetAppbarPos;
       AppBarMessage(abmActivate, FEdge, 0, rc);
-      if FEdge in [abeLeft, abeRight] then
+      if FEdge in cLeftRightEdge then
         rc.Width := Width
       else
         rc.Height := Height;
@@ -369,24 +347,24 @@ var
   rc: TRect;
   HiddenAppbarShowed: Boolean;
 begin
-  if FAutohide and (FEdge in [abeLeft .. abeBottom]) then
+  if FAutohide and (FEdge in cAnyEdge) then
+  begin
+    HiddenAppbarShowed := (Width = AppbarWidth) or (Height = AppbarHeight);
+    if bShow <> HiddenAppbarShowed then
     begin
-      HiddenAppbarShowed := (Width = AppbarWidth) or (Height = AppbarHeight);
-      if bShow <> HiddenAppbarShowed then
-        begin
-          if bShow then
-            begin
-              rc := GetVisibleAppbarRect(FEdge);
-              SetTimer(Handle, 0, SLIDE_DEF_TIMER_INTERVAL, nil);
-            end
-          else
-            begin
-              rc := GetHiddenAppbarRect(FEdge);
-              KillTimer(Handle, 0);
-            end;
-          SlideWindow(rc);
-        end;
+      if bShow then
+      begin
+        rc := GetVisibleAppbarRect(FEdge);
+        SetTimer(Handle, 0, SLIDE_DEF_TIMER_INTERVAL, nil);
+      end
+      else
+      begin
+        rc := GetHiddenAppbarRect(FEdge);
+        KillTimer(Handle, 0);
+      end;
+      SlideWindow(rc);
     end;
+  end;
 end;
 
 procedure TAppBarX.SlideWindow(var rcEnd: TRect);
@@ -401,26 +379,29 @@ begin
 
   // Get the current window position
   GetWindowRect(Handle, rcStart);
-  if bFullDragOn and ((rcStart.Left <> rcEnd.Left) or (rcStart.Top <> rcEnd.Top) or (rcStart.Right <> rcEnd.Right) or (rcStart.Bottom <> rcEnd.Bottom)) then
+  if bFullDragOn and ((rcStart.Left <> rcEnd.Left) or (rcStart.Top <> rcEnd.Top) or (rcStart.Right <> rcEnd.Right) or
+      (rcStart.Bottom <> rcEnd.Bottom)) then
+  begin
+    // Get our starting and ending time
+    dwTimeStart := GetTickCount;
+    dwTimeEnd := dwTimeStart + SLIDE_DEF_TIMER_INTERVAL;
+    dwTime := dwTimeStart;
+    while (dwTime < dwTimeEnd) do
     begin
-      // Get our starting and ending time
-      dwTimeStart := GetTickCount;
-      dwTimeEnd := dwTimeStart + SLIDE_DEF_TIMER_INTERVAL;
-      dwTime := dwTimeStart;
-      while (dwTime < dwTimeEnd) do
-        begin
-          // While we are still sliding, calculate our new position
-          dwTimeDiff := dwTime - dwTimeStart;
-          tmpRect.Left := rcStart.Left - (rcStart.Left - rcEnd.Left) * integer(dwTimeDiff) div SLIDE_DEF_TIMER_INTERVAL;
-          tmpRect.Top := rcStart.Top - (rcStart.Top - rcEnd.Top) * integer(dwTimeDiff) div SLIDE_DEF_TIMER_INTERVAL;
-          tmpRect.Width := rcStart.Width - (rcStart.Width - rcEnd.Width) * integer(dwTimeDiff) div SLIDE_DEF_TIMER_INTERVAL;
-          tmpRect.Height := rcStart.Height - (rcStart.Height - rcEnd.Height) * integer(dwTimeDiff) div SLIDE_DEF_TIMER_INTERVAL;
-          // Show the window at its changed position
-          SetWindowPos(Handle, 0, tmpRect.Left, tmpRect.Top, tmpRect.Width, tmpRect.Height, SWP_NOZORDER or SWP_NOACTIVATE or SWP_DRAWFRAME);
-          UpdateWindow(Handle);
-          dwTime := GetTickCount;
-        end;
+      // While we are still sliding, calculate our new position
+      dwTimeDiff := dwTime - dwTimeStart;
+      tmpRect.Left := rcStart.Left - (rcStart.Left - rcEnd.Left) * integer(dwTimeDiff) div SLIDE_DEF_TIMER_INTERVAL;
+      tmpRect.Top := rcStart.Top - (rcStart.Top - rcEnd.Top) * integer(dwTimeDiff) div SLIDE_DEF_TIMER_INTERVAL;
+      tmpRect.Width := rcStart.Width - (rcStart.Width - rcEnd.Width) * integer(dwTimeDiff) div SLIDE_DEF_TIMER_INTERVAL;
+      tmpRect.Height := rcStart.Height - (rcStart.Height - rcEnd.Height) * integer(dwTimeDiff)
+        div SLIDE_DEF_TIMER_INTERVAL;
+      // Show the window at its changed position
+      SetWindowPos(Handle, HWND_TOPMOST, tmpRect.Left, tmpRect.Top, tmpRect.Width, tmpRect.Height,
+        SWP_NOZORDER or SWP_NOACTIVATE or SWP_DRAWFRAME);
+      UpdateWindow(Handle);
+      dwTime := GetTickCount;
     end;
+  end;
 
   // Make sure that the window is at its final position
   BoundsRect := rcEnd;
@@ -432,10 +413,10 @@ var
 begin
   inherited;
   if FAppbarCreated and (Msg.WParam <> WA_INACTIVE) then
-    begin
-      rc := BoundsRect;
-      AppBarMessage(abmActivate, FEdge, 0, rc);
-    end;
+  begin
+    rc := BoundsRect;
+    AppBarMessage(abmActivate, FEdge, 0, rc);
+  end;
 end;
 
 procedure TAppBarX.WMExitSizeMove(var Msg: TMessage);
@@ -443,33 +424,33 @@ begin
   inherited;
 
   if FAppbarCreated and (FProposedEdge = FEdge) then
-    begin
-      case FEdge of
-        abeLeft, abeRight:
-          AppbarWidth := Width;
-        abeTop, abeBottom:
-          AppbarHeight := Height;
-        abeUnknown:
-          ;
-        abeFloat:
-          ;
-      end;
-      SetAppbarPos;
-    end
-  else
-    begin
-      Edge := FProposedEdge;
+  begin
+    case FEdge of
+      abeLeft, abeRight:
+        AppbarWidth := Width;
+      abeTop, abeBottom:
+        AppbarHeight := Height;
+      abeUnknown:
+        ;
+      abeFloat:
+        ;
     end;
+    SetAppbarPos;
+  end
+  else
+  begin
+    Edge := FProposedEdge;
+  end;
   FProposedEdge := abeUnknown;
 end;
 
 procedure TAppBarX.WMHideTimer(var Msg: TMessage);
 begin
-  if FAutohide and (FEdge in [abeLeft .. abeBottom]) then
-    begin
-      if (GetActiveWindow <> Handle) and not BoundsRect.Contains(Mouse.CursorPos) then
-        ShowHiddenAppBar(False);
-    end;
+  if FAutohide and (FEdge in cAnyEdge) then
+  begin
+    if (GetActiveWindow <> Handle) and not BoundsRect.Contains(Mouse.CursorPos) then
+      ShowHiddenAppBar(False);
+  end;
 end;
 
 procedure TAppBarX.WMMoving(var Msg: TWMMoving);
@@ -486,32 +467,33 @@ procedure TAppBarX.WMMoving(var Msg: TWMMoving);
     rc.Inflate(-GetSystemMetrics(SM_CXVSCROLL), -GetSystemMetrics(SM_CYHSCROLL));
     // If the point is in the adjusted workarea
     if rc.Contains(pt) then
-      begin
-        Result := abeFloat;
-        exit;
-      end;
+    begin
+      Result := abeFloat;
+      exit;
+    end;
 
     // If we get here, the AppBar should be docked; determine the proper edge
     // Find the distance from the point to the center
     ptOffset := pt.Subtract(Self.Monitor.BoundsRect.CenterPoint);
     // Determine if the point is farther from the left/right or top/bottom
-    bIsLeftOrRight := ((Abs(ptOffset.Y) * Self.Monitor.BoundsRect.Width) <= (Abs(ptOffset.X) * Self.Monitor.BoundsRect.Height));
+    bIsLeftOrRight := ((Abs(ptOffset.Y) * Self.Monitor.BoundsRect.Width) <=
+        (Abs(ptOffset.X) * Self.Monitor.BoundsRect.Height));
 
     // Propose an edge
     if bIsLeftOrRight then
-      begin
-        if 0 <= ptOffset.X then
-          Result := abeRight
-        else
-          Result := abeLeft;
-      end
+    begin
+      if 0 <= ptOffset.X then
+        Result := abeRight
+      else
+        Result := abeLeft;
+    end
     else
-      begin
-        if 0 <= ptOffset.Y then
-          Result := abeBottom
-        else
-          Result := abeTop;
-      end;
+    begin
+      if 0 <= ptOffset.Y then
+        Result := abeBottom
+      else
+        Result := abeTop;
+    end;
   end;
 
   function CalcProposedState(var pt: TPoint): TAppBarEdge;
@@ -533,6 +515,7 @@ var
   pt: TPoint;
   abEdgeProposed: TAppBarEdge;
 begin
+  inherited;
   // We control the moving of the AppBar.  For example, if the mouse moves
   // close to an edge, we want to dock the AppBar
   prc := Msg.DragRect;
@@ -544,23 +527,20 @@ begin
   abEdgeProposed := CalcProposedState(pt);
 
   if abEdgeProposed = abeFloat then
+  begin
+    if (FProposedEdge in cAnyEdge) and not FFloatRect.IsEmpty then
     begin
-      if (FProposedEdge <>abeFloat) and not FFloatRect.IsEmpty then
-        begin
-          prc^ := FFloatRect;
-          prc.SetLocation(pt.X - prc.Width div 2, pt.Y);
-        end
-      else
-        if FProposedEdge = abeFloat then
-          FFloatRect := BoundsRect;
+      prc^ := FFloatRect;
+      prc.SetLocation(pt.X - prc.Width div 2, pt.Y);
     end
+    else
+      if FProposedEdge = abeFloat then
+        FFloatRect := BoundsRect;
+  end
   else
-    begin
-      prc^ := GetVisibleAppbarRect(abEdgeProposed);
-      //if FEdge = abeFloat then
-      //  if FProposedEdge = abeFloat then
-      //    FFloatRect := BoundsRect;
-    end;
+  begin
+    prc^ := GetVisibleAppbarRect(abEdgeProposed);
+  end;
   FProposedEdge := abEdgeProposed;
 end;
 
@@ -587,7 +567,7 @@ begin
     vKey := VK_LBUTTON;
   bPrimaryMouseBtnDown := ((GetAsyncKeyState(vKey) and $8000) <> 0);
 
-  if (Msg.Result = HTCLIENT) and bPrimaryMouseBtnDown and (FDragByMouse) then
+  if (Msg.Result = HTCLIENT) and bPrimaryMouseBtnDown and FDragByMouse then
     // User clicked in client area, allow AppBar to move.  We get this
     // behavior by pretending that the user clicked on the caption area
     Msg.Result := HTCAPTION;
@@ -608,39 +588,40 @@ begin
     abeFloat:
       begin
         if pt.X <= BorderDelta then
-          begin
-            if (pt.Y <= BorderDelta) then
-              Msg.Result := HTTOPLEFT
+        begin
+          if (pt.Y <= BorderDelta) then
+            Msg.Result := HTTOPLEFT
+          else
+            if pt.Y >= (rcClient.Height - BorderDelta) then
+              Msg.Result := HTBOTTOMLEFT
             else
-              if pt.Y >= (rcClient.Height - BorderDelta) then
-                Msg.Result := HTBOTTOMLEFT
-              else
-                Msg.Result := HTLEFT;
-          end
+              Msg.Result := HTLEFT;
+        end
         else
           if pt.X >= (rcClient.Width - BorderDelta) then
-            begin
-              if (pt.Y <= BorderDelta) then
-                Msg.Result := HTTOPRIGHT
+          begin
+            if (pt.Y <= BorderDelta) then
+              Msg.Result := HTTOPRIGHT
+            else
+              if pt.Y >= (rcClient.Height - BorderDelta) then
+                Msg.Result := HTBOTTOMRIGHT
               else
-                if pt.Y >= (rcClient.Height - BorderDelta) then
-                  Msg.Result := HTBOTTOMRIGHT
-                else
-                  Msg.Result := HTRIGHT;
-            end
+                Msg.Result := HTRIGHT;
+          end
           else
-            begin
-              if pt.Y < BorderDelta then
-                Msg.Result := HTTOP;
-              if pt.Y > (rcClient.Height - BorderDelta) then
-                Msg.Result := HTBOTTOM;
-            end;
+          begin
+            if pt.Y < BorderDelta then
+              Msg.Result := HTTOP;
+            if pt.Y > (rcClient.Height - BorderDelta) then
+              Msg.Result := HTBOTTOM;
+          end;
       end;
   end;
 end;
 
 procedure TAppBarX.WMNCMouseMove(var Msg: TWMNCMouseMove);
 begin
+  inherited;
   ShowHiddenAppBar(True);
 end;
 
@@ -650,10 +631,10 @@ var
 begin
   inherited;
   if FAppbarCreated then
-    begin
-      rc := BoundsRect;
-      AppBarMessage(abmWindowPosChanged, FEdge, 0, rc);
-    end;
+  begin
+    rc := BoundsRect;
+    AppBarMessage(abmWindowPosChanged, FEdge, 0, rc);
+  end;
 end;
 
 end.
